@@ -263,3 +263,37 @@ def test_timing_race_times_match_lap_data(client):
     for d in shared:
         last = max(set(jolpica[d]) & set(timing[d]))
         assert abs(jolpica[d][last] / 1000 - timing[d][last]) < 2
+
+
+def test_corner_by_corner_and_alignment_match_sector_times(client):
+    """The lap matching behind the gap trace and the corners must agree with the official sector times."""
+    import numpy as np
+
+    sessions = client.get("/api/races/2026/1/sessions")
+    if sessions.status_code != 200 or not sessions.json():
+        pytest.skip("no 2026 timing data loaded")
+    q = next(s for s in sessions.json() if s["type"] == "Q")
+    errors = []
+    for a, b in zip(q["laps"][:6], q["laps"][1:7], strict=False):
+        t = get(client, f"/api/races/2026/1/telemetry?session=Q&drivers={a['driver_id']},{b['driver_id']}")
+        cd = t["corner_deltas"]
+        assert (
+            cd["corners"] and abs(sum(c["gain_s"] for c in cd["corners"]) + cd["straights_s"] - cd["lap_gap_s"]) < 0.005
+        )
+        assert abs(cd["lap_gap_s"] - (b["lap_time_ms"] - a["lap_time_ms"]) / 1000) < 0.002
+        la, lb = t["laps"][a["driver_id"]], t["laps"][b["driver_id"]]
+        sa, sb = la["sectors"], lb["sectors"]
+        if sa and sb and sa["s1_ms"] and sb["s1_ms"]:
+            at_s1 = float(np.interp(sa["s1_ms"] / 1000, la["time"], t["delta"]))
+            errors.append(abs(at_s1 - (sb["s1_ms"] - sa["s1_ms"]) / 1000))
+    assert errors and float(np.median(errors)) < 0.1
+
+
+def test_pace_ranking(client):
+    r = get(client, "/api/races/2021/22/pace-ranking")
+    rows = r["rows"]
+    assert rows[0]["gap_s"] == 0 and all(x["q25_s"] <= x["median_s"] <= x["q75_s"] for x in rows)
+    top = {x["driver_id"] for x in rows[:2]}
+    assert top == {"lewis-hamilton", "max-verstappen"}  # Abu Dhabi 2021: the two title contenders were fastest
+    pairs = {x["driver_id"]: x["teammate"] for x in rows if x["teammate"]}
+    assert pairs["max-verstappen"]["gap_s"] == -pairs["sergio-perez"]["gap_s"]

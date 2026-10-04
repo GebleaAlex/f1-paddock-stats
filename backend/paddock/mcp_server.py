@@ -304,8 +304,9 @@ def car_ratings(year: int | None = None, constructor_id: str | None = None) -> d
 
 @server.tool()
 def compare_laps(year: int, round: int, driver_a: str, driver_b: str, session: str = "Q") -> dict[str, Any]:
-    """Compare two drivers' fastest laps in a session (2018+): lap and sector times, top speed, clipping, and in
-    how many of 25 track sections each was faster. session: Q, SQ, S or R."""
+    """Compare two drivers' fastest laps in a session (2018+): lap and sector times, top speed, clipping, in how
+    many of 25 track sections each was faster, and the time gained corner by corner (positive: driver_a quicker),
+    with minimum speeds and braking points. session: Q, SQ, S or R."""
     c = telemetry.compare_laps(year, round, session=session, drivers=f"{driver_a},{driver_b}")
     out = {}
     for d in c["drivers"]:
@@ -317,7 +318,34 @@ def compare_laps(year: int, round: int, driver_a: str, driver_b: str, session: s
             **{k: c["straights"][d][k] for k in ("top_speed_kmh", "full_throttle_pct", "clipping_m")},
             "sections_won": sum(1 for s in c.get("dominance", []) if s["driver_id"] == d),
         }
-    return {"session": c["session"]["name"], "laps": out, "gap_at_line_s": c["delta"][-1] if c.get("delta") else None}
+    cd = c.get("corner_deltas") or {}
+    return {
+        "session": c["session"]["name"],
+        "laps": out,
+        "lap_gap_s": cd.get("lap_gap_s"),
+        "straights_s": cd.get("straights_s"),
+        "corners": [
+            {k: x[k] for k in ("corner", "gain_s", "min_speed", "brake_before_apex_m")}
+            for x in cd.get("corners", [])
+            if x["reliable"]
+        ],
+        "corners_not_measured": [x["corner"] for x in cd.get("corners", []) if not x["reliable"]],
+    }
+
+
+@server.tool()
+def race_pace_ranking(year: int, round: int) -> dict[str, Any]:
+    """Every driver's race pace (1996+): median fuel-corrected green-flag lap, the spread of their laps (25th to
+    75th percentile), the gap to the fastest and to their teammate, and where they finished."""
+    r = analysis.pace_ranking(year, round)
+    return {
+        "has_timing": r["has_timing"],
+        "rows": _trim(
+            r["rows"],
+            ("rank", "name", "constructor", "position", "laps", "median_s", "q25_s", "q75_s", "gap_s", "teammate"),
+        ),
+        "not_ranked": r["too_few_laps"],
+    }
 
 
 def main() -> None:

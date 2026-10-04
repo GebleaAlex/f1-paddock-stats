@@ -248,13 +248,16 @@ def process_session(session, year: int, rnd: int, code: str, race_id: int, drive
             tel = fl.get_telemetry()
             if tel is None or len(tel) < 20:
                 continue
+            channels = _resample(tel)
+            if len(channels["distance"]) < 20:  # no usable distance (car data missing): nothing to compare
+                continue
             tel_rows.append(
                 {
                     "session_key": key,
                     "driver_id": driver_id,
                     "lap": _int(fl["LapNumber"]),
                     "lap_time_ms": _ms(fl["LapTime"]),
-                    **_resample(tel),
+                    **channels,
                 }
             )
         except Exception as e:  # one driver's missing telemetry must not lose the session

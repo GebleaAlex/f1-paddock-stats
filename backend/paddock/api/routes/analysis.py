@@ -5,6 +5,7 @@ from __future__ import annotations
 from collections import defaultdict
 from statistics import median
 
+import numpy as np
 from fastapi import APIRouter, HTTPException, Query
 
 from ... import analysis as an
@@ -433,3 +434,78 @@ def circuit_pit_loss(circuit_id: str):
     # Median over every race here: single races are skewed by safety cars and red flags.
     values = [x["pit_loss_s"] for x in out]
     return {"races": out, "typical_s": round(median(values), 1) if values else None}
+
+
+PACE_MIN_LAPS = 5
+
+
+@router.get("/{year}/{round_}/pace-ranking")
+def pace_ranking(year: int, round_: int):
+    """Every driver's race pace: the median of their fuel-corrected green-flag laps, the spread of those laps and the
+    gap to their teammate (1996+, with tyres and safety cars from 2018)."""
+    race = _race(year, round_)
+    rid = race["id"]
+    key = _timing_key(rid)
+    timing = _timing_laps(key)
+    neutral = an.neutralised_laps(timing)
+    total = race["laps"] or max((r["lap"] for r in timing), default=0)
+    laps = timing
+    if not laps:
+        laps = db.rows("SELECT driver_id, lap, time_ms FROM lap WHERE race_id = ? ORDER BY driver_id, lap", [rid])
+        pit_laps = {(s["driver_id"], s["lap"]) for s in _stops(rid)}
+        for r in laps:
+            r["pit_in"] = (r["driver_id"], r["lap"]) in pit_laps
+            r["pit_out"] = (r["driver_id"], r["lap"] - 1) in pit_laps
+    drivers = {
+        d["driver_id"]: d
+        for d in db.rows(
+            """
+            SELECT rr.driver_id, d.name, d.abbreviation, rr.constructor_id, c.name AS constructor,
+                   rr.position_number AS position, rr.position_text
+            FROM race_result rr JOIN driver d ON d.id = rr.driver_id JOIN constructor c ON c.id = rr.constructor_id
+            WHERE rr.race_id = ?
+            """,
+            [rid],
+        )
+    }
+    by_driver: dict[str, list[dict]] = defaultdict(list)
+    for r in laps:
+        by_driver[r["driver_id"]].append(r)
+    rows, too_few = [], []
+    for d, ls in by_driver.items():
+        if d not in drivers:
+            continue
+        ls.sort(key=lambda r: r["lap"])
+        clean = an.clean_laps(ls, neutral)
+        if len(clean) < PACE_MIN_LAPS:
+            too_few.append(d)
+            continue
+        corrected = np.array([an.fuel_corrected(r["time_ms"], r["lap"], total) for r in clean]) / 1000
+        q25, med, q75 = np.percentile(corrected, [25, 50, 75])
+        rows.append(
+            {
+                **drivers[d],
+                "laps": len(clean),
+                "median_s": round(float(med), 3),
+                "q25_s": round(float(q25), 3),
+                "q75_s": round(float(q75), 3),
+                "raw_median_s": round(float(np.median([r["time_ms"] for r in clean])) / 1000, 3),
+            }
+        )
+    rows.sort(key=lambda r: r["median_s"])
+    best = rows[0]["median_s"] if rows else 0
+    medians: dict[str, list[tuple[str, float]]] = defaultdict(list)
+    for r in rows:
+        medians[r["constructor_id"]].append((r["driver_id"], r["median_s"]))
+    for i, r in enumerate(rows, start=1):
+        r["rank"] = i
+        r["gap_s"] = round(r["median_s"] - best, 3)
+        mates = [(m, v) for m, v in medians[r["constructor_id"]] if m != r["driver_id"]]
+        r["teammate"] = {"driver_id": mates[0][0], "gap_s": round(r["median_s"] - mates[0][1], 3)} if mates else None
+    return {
+        "race": race,
+        "has_timing": bool(timing),
+        "rows": rows,
+        "too_few_laps": [drivers[d]["name"] for d in too_few],
+        "method": {"min_laps": PACE_MIN_LAPS, "fuel_start_kg": an.FUEL_START_KG, "fuel_s_per_kg": an.FUEL_S_PER_KG},
+    }

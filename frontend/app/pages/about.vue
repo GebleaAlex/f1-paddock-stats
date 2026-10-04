@@ -61,7 +61,15 @@ usePageMeta({ title: 'About and data', description: 'Where Paddock Stats gets it
           <p>
             <b>Telemetry</b> (2018 onwards) is each driver's fastest lap of a session, resampled every 10 metres. The
             track map splits the lap into 25 equal sections and colours each by the faster driver. Clipping is the
-            distance at full throttle over which the car still slows down.
+            distance at full throttle over which the car still slows down. To compare two laps, every point of
+            the first is matched to the moment the other car passed the same place, pinned at the sector lines, where
+            the official sector times say exactly when each car passed. Each corner runs from up to 200 m before its
+            apex to 150 m after it, and the corners and the straights add up to the lap time gap. When a lap's speed
+            trace drops out, the laps are matched by position on track and the corners affected are not measured.
+          </p>
+          <p>
+            <b>The race pace ranking</b> uses the median of each driver's fuel-corrected green-flag laps, with the
+            middle half of those laps as the bar. Drivers with fewer than five such laps are not ranked.
           </p>
           <p>
             <b>The driver rating</b> fits every teammate duel at once, measuring each season's gaps against that

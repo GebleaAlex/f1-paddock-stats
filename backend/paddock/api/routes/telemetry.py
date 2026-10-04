@@ -41,7 +41,7 @@ def sessions(year: int, round_: int):
     rows = db.rows(
         """
         SELECT s.type, s.session_key, count(t.driver_id) AS drivers
-        FROM timing_session s LEFT JOIN timing_telemetry t ON t.session_key = s.session_key
+        FROM timing_session s LEFT JOIN timing_telemetry t ON t.session_key = s.session_key AND len(t.distance) >= 20
         WHERE s.race_id = ? GROUP BY ALL
         """,
         [rid],
@@ -56,7 +56,7 @@ def sessions(year: int, round_: int):
         LEFT JOIN race_result rr ON rr.race_id = s.race_id AND rr.driver_id = t.driver_id
         LEFT JOIN qualifying_result q ON q.race_id = s.race_id AND q.driver_id = t.driver_id
         LEFT JOIN sprint_race_result sr ON sr.race_id = s.race_id AND sr.driver_id = t.driver_id
-        WHERE s.race_id = ? ORDER BY t.lap_time_ms
+        WHERE s.race_id = ? AND len(t.distance) >= 20 ORDER BY t.lap_time_ms
         """,
         [rid],
     )
@@ -84,7 +84,7 @@ def compare_laps(
         row = db.one(
             """
             SELECT t.*, d.name, d.abbreviation FROM timing_telemetry t JOIN driver d ON d.id = t.driver_id
-            WHERE t.session_key = ? AND t.driver_id = ?
+            WHERE t.session_key = ? AND t.driver_id = ? AND len(t.distance) >= 20
             """,
             [s["session_key"], driver_id],
         )
@@ -96,6 +96,10 @@ def compare_laps(
         )
         row.pop("session_key")
         row["sectors"] = sectors
+        # A dropout in the speed trace: the lap is still compared by position, but its traces have flat spots.
+        row["telemetry_gaps"] = tm.has_gaps(row)
+        if row["telemetry_gaps"]:
+            row["distance"] = tm.path_distance(row)
         laps[driver_id] = row
     base = laps[ids[0]]
     out = {
@@ -105,8 +109,15 @@ def compare_laps(
         "straights": {d: tm.straights(lap) for d, lap in laps.items()},
     }
     if len(ids) == 2:
-        out["delta"] = tm.delta(base, laps[ids[1]])
-        out["dominance"] = tm.dominance(laps)
+        other = laps[ids[1]]
+        aligned = tm.align(base, other)
+        out["delta"] = tm.delta(base, other, aligned)
+        out["dominance"] = tm.dominance(laps, aligned={ids[1]: aligned})
+        gaps = tm.gap_regions(base, other, aligned)
+        out["corner_deltas"] = tm.corner_deltas(base, other, s["corners"], aligned, gaps=gaps)
+        out["gap_regions"] = [{"from_m": round(lo), "to_m": round(hi)} for lo, hi in gaps]
+        # Draw the second lap on the reference lap's distance, so both traces line up with the gap and the corners.
+        other["distance"] = tm.on_base_distance(base, other, aligned)
     return out
 
 
@@ -162,7 +173,7 @@ def straight_line(year: int, round_: int, session: str = Query("Q")):
         FROM timing_telemetry t JOIN driver d ON d.id = t.driver_id
         LEFT JOIN qualifying_result q ON q.race_id = ? AND q.driver_id = t.driver_id
         LEFT JOIN race_result rr ON rr.race_id = ? AND rr.driver_id = t.driver_id
-        WHERE t.session_key = ?
+        WHERE t.session_key = ? AND len(t.distance) >= 20
         """,
         [rid, rid, s["session_key"]],
     )
@@ -193,7 +204,7 @@ def driver_telemetry_laps(driver_id: str):
                (SELECT min(t2.lap_time_ms) FROM timing_telemetry t2 WHERE t2.session_key = t.session_key) AS best_ms
         FROM timing_telemetry t JOIN timing_session s ON s.session_key = t.session_key
         JOIN race r ON r.id = s.race_id JOIN grand_prix gp ON gp.id = r.grand_prix_id
-        WHERE t.driver_id = ? AND s.type IN ('Q', 'SQ')
+        WHERE t.driver_id = ? AND s.type IN ('Q', 'SQ') AND len(t.distance) >= 20
         ORDER BY s.year DESC, s.round DESC, s.type
         """,
         [driver_id],

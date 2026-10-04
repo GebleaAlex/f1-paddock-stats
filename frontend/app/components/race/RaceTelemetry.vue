@@ -13,6 +13,18 @@ interface Compare {
   delta?: number[]
   dominance?: { from_m: number; to_m: number; driver_id: string; times: Record<string, number> }[]
   straights: Record<string, { top_speed_kmh: number; full_throttle_pct: number; clipping_m: number }>
+  corner_deltas?: { corners: CornerDelta[]; lap_gap_s: number | null; straights_s: number | null }
+  gap_regions?: { from_m: number; to_m: number }[]
+}
+interface CornerDelta {
+  corner: string
+  apex_m: number
+  from_m: number
+  to_m: number
+  gain_s: number
+  min_speed: (number | null)[]
+  brake_before_apex_m: (number | null)[]
+  reliable: boolean
 }
 
 const props = defineProps<{ year: number; round: number }>()
@@ -56,7 +68,39 @@ const ready = computed(() => !!cmp.value && 'laps' in (cmp.value as object))
 const laps = computed(() => (ready.value ? cmp.value!.drivers.map((d) => cmp.value!.laps[d]!) : []))
 const colors = computed(() => [seriesColor(1), seriesColor(2)])
 const templateColors = [seriesVar(1), seriesVar(2)]
-const chart = useChartOption(() => (ready.value ? telemetryOption(laps.value, cmp.value!.delta, cmp.value!.session.corners, colors.value) : {}))
+// Corner by corner: which corner was picked in the table (highlighted on the chart), and the table order.
+const focusCorner = ref<string | null>(null)
+watch(url, () => (focusCorner.value = null))
+const cornerOrder = useQueryState('corners', 'lap')
+const corners = computed(() => cmp.value?.corner_deltas?.corners ?? [])
+const sortedCorners = computed(() =>
+  cornerOrder.value === 'biggest'
+    ? corners.value.slice().sort((x, y) => Number(y.reliable) - Number(x.reliable) || Math.abs(y.gain_s) - Math.abs(x.gain_s))
+    : corners.value,
+)
+const maxGain = computed(() => Math.max(0.05, ...corners.value.filter((c) => c.reliable).map((c) => Math.abs(c.gain_s))))
+const cornerTotals = computed(() => {
+  const cd = cmp.value?.corner_deltas
+  if (!cd || cd.lap_gap_s == null) return null
+  return { corners: cd.lap_gap_s - (cd.straights_s ?? 0), straights: cd.straights_s ?? 0 }
+})
+const chart = useChartOption(() => {
+  if (!ready.value) return {}
+  const focus = corners.value.find((c) => c.corner === focusCorner.value)
+  return telemetryOption(laps.value, cmp.value!.delta, cmp.value!.session.corners, colors.value, {
+    focus: focus ? [focus.from_m, focus.to_m] : null,
+    gaps: (cmp.value!.gap_regions ?? []).map((g) => [g.from_m, g.to_m] as [number, number]),
+  })
+})
+/** "+0.12 s" in favour of whichever driver was quicker; gain_s > 0 means the first driver was quicker. */
+function gainText(g: number) {
+  if (Math.abs(g) < 0.005) return 'level'
+  const who = g > 0 ? laps.value[0] : laps.value[1]
+  return `${who?.abbreviation ?? who?.name} +${Math.abs(g).toFixed(2)} s`
+}
+function speedText(v: number | null | undefined) {
+  return v == null ? '–' : `${Math.round(v)}`
+}
 const sectorsWon = computed(() => {
   const out: Record<string, number> = {}
   for (const s of cmp.value?.dominance ?? []) out[s.driver_id] = (out[s.driver_id] ?? 0) + 1
@@ -94,6 +138,7 @@ const is2026 = computed(() => props.year >= 2026)
           <div class="small ink-2 num">
             S1 {{ sector(lap.sectors?.s1_ms) }} · S2 {{ sector(lap.sectors?.s2_ms) }} · S3 {{ sector(lap.sectors?.s3_ms) }}
           </div>
+          <div v-if="lap.telemetry_gaps" class="small warn-line">The speed trace drops out in places on this lap (shaded grey); the laps are matched by position on track instead.</div>
           <div class="small muted">
             <template v-if="lap.sectors?.compound">{{ compound(lap.sectors.compound).label }} tyres<template v-if="lap.sectors.tyre_life">, {{ lap.sectors.tyre_life }} laps old</template> · </template>
             Top speed {{ cmp!.straights[lap.driver_id]?.top_speed_kmh }} km/h
@@ -118,6 +163,64 @@ const is2026 = computed(() => props.year >= 2026)
           <p v-if="pending" class="small muted">Loading laps…</p>
         </Panel>
       </div>
+
+      <Panel
+        v-if="ready && laps.length === 2 && corners.length"
+        title="Corner by corner"
+        :note="cornerTotals ? `Where the ${Math.abs(cmp!.corner_deltas!.lap_gap_s!).toFixed(3)} s between the laps was made: ${Math.abs(cornerTotals.corners).toFixed(2)} s through the corners (braking zone to exit), ${Math.abs(cornerTotals.straights).toFixed(2)} s on the straights, each in favour of whoever was quicker there. Tap a corner to highlight it on the chart; differences of a few hundredths are within the precision of the data.${['R', 'S'].includes(cmp!.session.type) ? ' These are race laps, often driven on different laps: traffic, slipstream and DRS can make one corner look very different.' : ''}` : ''"
+        flush
+      >
+        <template #actions>
+          <UiChoice v-model="cornerOrder" label="Order" :options="[{ value: 'lap', label: 'Lap order' }, { value: 'biggest', label: 'Biggest gaps' }]" />
+        </template>
+        <div class="tot">
+          <span><b>Corners:</b> {{ cornerTotals ? gainText(cornerTotals.corners) : '' }}</span>
+          <span><b>Straights:</b> {{ cornerTotals ? gainText(cornerTotals.straights) : '' }}</span>
+        </div>
+        <div class="table-scroll">
+          <table class="data corners">
+            <thead>
+              <tr>
+                <th>Corner</th>
+                <th class="bar-col">Time gained</th>
+                <th class="r">Min speed <span class="muted">km/h</span></th>
+                <th class="r hide-sm">Brakes before apex</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr
+                v-for="c in sortedCorners"
+                :key="c.corner"
+                :class="{ focus: focusCorner === c.corner, unreliable: !c.reliable }"
+                tabindex="0"
+                @click="focusCorner = focusCorner === c.corner ? null : c.corner"
+                @keydown.enter="focusCorner = focusCorner === c.corner ? null : c.corner"
+              >
+                <td class="nowrap"><b>Turn {{ c.corner }}</b><span class="sub-line">{{ (c.apex_m / 1000).toFixed(2) }} km</span></td>
+                <td class="bar-col">
+                  <template v-if="c.reliable">
+                    <div class="diverge" :aria-label="gainText(c.gain_s)">
+                      <span class="half left"><span v-if="c.gain_s > 0" :style="{ width: `${(c.gain_s / maxGain) * 100}%`, background: templateColors[0] }" /></span>
+                      <span class="half right"><span v-if="c.gain_s < 0" :style="{ width: `${(-c.gain_s / maxGain) * 100}%`, background: templateColors[1] }" /></span>
+                    </div>
+                    <span class="small num">{{ gainText(c.gain_s) }}</span>
+                  </template>
+                  <span v-else class="small muted">Telemetry gap, not measured</span>
+                </td>
+                <td class="r num nowrap">{{ speedText(c.min_speed[0]) }} <span class="muted">/</span> {{ speedText(c.min_speed[1]) }}</td>
+                <td class="r num nowrap hide-sm">
+                  <template v-if="c.brake_before_apex_m[0] == null && c.brake_before_apex_m[1] == null"><span class="muted">flat out</span></template>
+                  <template v-else>{{ c.brake_before_apex_m[0] ?? '–' }} <span class="muted">/</span> {{ c.brake_before_apex_m[1] ?? '–' }} m</template>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <p class="tiny muted legend-line">
+          <span class="swatch" :style="{ background: templateColors[0] }" /> {{ laps[0]?.name }} quicker
+          <span class="swatch" :style="{ background: templateColors[1], marginLeft: '12px' }" /> {{ laps[1]?.name }} quicker · speeds and braking points: {{ laps[0]?.abbreviation }} / {{ laps[1]?.abbreviation }}
+        </p>
+      </Panel>
 
       <Panel
         v-if="straights?.rows.length"
@@ -148,6 +251,74 @@ const is2026 = computed(() => props.year >= 2026)
 </template>
 
 <style scoped>
+.tot {
+  display: flex;
+  gap: 18px;
+  flex-wrap: wrap;
+  padding: 0 var(--pad) 10px;
+  font-size: 13px;
+}
+.corners tbody tr {
+  cursor: pointer;
+}
+.corners tbody tr:hover {
+  background: var(--surface-2);
+}
+.corners tbody tr.focus {
+  background: var(--accent-soft);
+}
+.corners tr.unreliable td {
+  color: var(--muted);
+}
+.bar-col {
+  min-width: 200px;
+}
+.diverge {
+  display: inline-flex;
+  width: 140px;
+  height: 10px;
+  margin-right: 10px;
+  vertical-align: middle;
+}
+.half {
+  flex: 1;
+  display: flex;
+  background: var(--surface-2);
+}
+.half.left {
+  justify-content: flex-end;
+  border-right: 1px solid var(--axis);
+  border-radius: 3px 0 0 3px;
+}
+.half.right {
+  border-radius: 0 3px 3px 0;
+}
+.half > span {
+  display: block;
+  height: 100%;
+  border-radius: 3px;
+}
+.legend-line {
+  padding: 8px var(--pad) 12px;
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.warn-line {
+  border-left: 3px solid var(--warning);
+  padding-left: 8px;
+  color: var(--ink-2);
+}
+@media (max-width: 640px) {
+  .diverge {
+    width: 80px;
+  }
+  .bar-col {
+    min-width: 0;
+  }
+}
 .vs {
   flex: none !important;
 }

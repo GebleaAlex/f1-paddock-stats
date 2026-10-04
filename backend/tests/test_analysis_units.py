@@ -207,3 +207,50 @@ def test_car_model_separates_car_from_driver():
     assert drivers["ace"] < drivers["x"] - 0.3
     table = cars.season_table([{"key": "A2", "effect": effects["A2"]}, {"key": "B2", "effect": effects["B2"]}])
     assert table[0]["key"] == "A2" and table[0]["margin_pct"] == table[1]["gap_pct"] and table[1]["percentile"] == 0
+
+
+def _circle_lap(lap_s: float, slow_from: float | None = None, dropout: tuple[int, int] | None = None) -> dict:
+    """A 1 km circular lap at constant speed, optionally slower in the second half, with optional speed dropout."""
+    d = np.arange(0, 1000, 10.0)
+    v = np.full(d.size, 1000 / lap_s)
+    if slow_from is not None:
+        v[d >= slow_from] *= 0.9
+    t = np.concatenate([[0.0], np.cumsum(10 / v[:-1])])
+    angle = d / 1000 * 2 * np.pi
+    lap = {
+        "distance": d.tolist(),
+        "time": t.tolist(),
+        "speed": (v * 3.6).tolist(),
+        "throttle": [100] * d.size,
+        "brake": [0] * d.size,
+        "x": (np.cos(angle) * 1591.5).tolist(),  # tenths of a metre: radius 159 m, about 1 km round
+        "y": (np.sin(angle) * 1591.5).tolist(),
+        "lap_time_ms": t[-1] * 1000,
+    }
+    if dropout:
+        a, b = dropout
+        lap["x"][a:b] = [lap["x"][a]] * (b - a)
+        lap["y"][a:b] = [lap["y"][a]] * (b - a)
+    return lap
+
+
+def test_corner_deltas_add_up_to_the_lap_gap():
+    fast, slow = _circle_lap(20.0), _circle_lap(20.0, slow_from=500)
+    corners = [{"number": n, "letter": "", "distance": m} for n, m in ((1, 250), (2, 600), (3, 850))]
+    cd = tm.corner_deltas(fast, slow, corners)
+    assert cd["lap_gap_s"] > 0
+    assert abs(sum(c["gain_s"] for c in cd["corners"]) + cd["straights_s"] - cd["lap_gap_s"]) < 1e-6
+    by = {c["corner"]: c for c in cd["corners"]}
+    assert abs(by["1"]["gain_s"]) < 0.01  # same speed in the first half
+    assert by["2"]["gain_s"] > 0 and by["3"]["gain_s"] > 0  # the fast lap gains where the other slowed
+    assert all(c["reliable"] for c in cd["corners"])
+
+
+def test_dropouts_are_found_and_flag_corners():
+    clean, broken = _circle_lap(20.0), _circle_lap(20.0, dropout=(55, 65))
+    assert tm.dropouts(clean) == [] and tm.dropouts(broken)
+    aligned = tm.align(clean, broken)
+    gaps = tm.gap_regions(clean, broken, aligned)
+    corners = [{"number": 1, "letter": "", "distance": 250}, {"number": 2, "letter": "", "distance": 600}]
+    cd = tm.corner_deltas(clean, broken, corners, aligned, gaps=gaps)
+    assert [c["reliable"] for c in cd["corners"]] == [True, False]

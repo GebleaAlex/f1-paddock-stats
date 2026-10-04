@@ -27,13 +27,15 @@ Free, non-commercial and open source. Unofficial: not associated with the Formul
 - **Story (1996+).** The lap chart with safety-car, virtual safety car and red-flag bands next to a timeline of what
   happened: start, lead changes, pit stops, retirements, penalties.
 - **Lap chart and gaps (1996+).** Positions and gaps to the leader or any driver, lap by lap.
-- **Pace.** Fuel-corrected lap times on green-flag laps, with tyre colours from 2018, and every stint's pace and wear.
+- **Pace.** The whole field ranked by race pace (median fuel-corrected green-flag lap, the spread of those laps and
+  the gap to the teammate), plus lap times with tyre colours from 2018 and every stint's pace and wear.
 - **Strategy.** Tyre stints by compound, how much time a pit stop cost, and which undercuts and overcuts worked.
 - **Strategy simulator (2018+).** What if a driver had stopped two laps earlier, stopped once more, or fitted other
   tyres? A tyre model fitted on the race itself gives the new race time, finishing position and the best stop laps.
 - **Telemetry (2018+).** Any two drivers' fastest laps in a session: speed, time gap, throttle, brake and gear along the
-  lap, a track map coloured by the faster driver in each section with a replay of both laps, sectors, top speed and
-  clipping (the 2026 power units' energy limit).
+  lap, a track map coloured by the faster driver in each section with a replay of both laps, **time gained corner by
+  corner** with minimum speeds and braking points, sectors, top speed and clipping (the 2026 power units' energy
+  limit).
 - **Qualifying.** Best sectors, the ideal lap each driver had in them, and the time left on the table.
 
 **Comparisons and tools**
@@ -107,7 +109,7 @@ Interactive documentation at `/api/docs` when the API is running. The main route
 | `/api/seasons/{year}` · `/progression` · `/results-grid` · `/rescore` | Season, points per round, every result, other points systems |
 | `/api/seasons/{year}/title-odds` · `/competitive-order` | Simulated title chances; teams' gap to the fastest car |
 | `/api/races/{year}/{round}` · `/laps` | Results, qualifying, sprint, pit stops; every lap of every driver (1996+) |
-| `/api/races/{year}/{round}/story` · `/strategy` · `/pace` | Race story, tyre strategy and pit battles, fuel-corrected pace |
+| `/api/races/{year}/{round}/story` · `/strategy` · `/pace` · `/pace-ranking` | Race story, tyre strategy and pit battles, fuel-corrected pace, the field ranked by pace |
 | `/api/races/{year}/{round}/simulate?driver=&stops=&compounds=` | Strategy simulator (2018+) |
 | `/api/races/{year}/{round}/sessions` · `/telemetry` · `/qualifying-analysis` · `/straights` | 2018+ timing and telemetry |
 | `/api/drivers/{id}` · `/results` · `/telemetry-laps` | Driver page data |
@@ -153,8 +155,8 @@ sessions with `paddock timing --years <this year>`.
 
 ### Ask the data from Claude (MCP)
 
-`paddock mcp` runs an MCP server on stdio with 18 tools: search, seasons, races, race story and strategy, the strategy
-simulator, drivers, teammate head-to-heads, comparisons, records, the stat explorer, driver and car ratings, title
+`paddock mcp` runs an MCP server on stdio with 19 tools: search, seasons, races, race story and strategy, the strategy
+simulator, race pace rankings, drivers, teammate head-to-heads, comparisons, records, the stat explorer, driver and car ratings, title
 odds, safety cars and weather per circuit, qualifying analysis and lap comparisons. For Claude Code:
 
 ```bash
@@ -201,6 +203,13 @@ Docker images.
   within six laps, judged by the order after both stops; stops under a safety car are left out.
 - **Title chances**: 20,000 simulations of the remaining races, each driver scoring like they have so far that season.
 - **Clipping**: distance at full throttle over which the car still slows down, from each driver's fastest lap.
+- **Lap comparison**: every point of the reference lap is matched to the moment the other car passed the same place,
+  stretching the distances piece by piece between the two sector lines, where the official sector times say exactly
+  when each car passed. Laps whose speed trace drops out are matched by position on track, and corners inside a
+  dropout are marked as not measured. A corner runs from up to 200 m before its apex to 150 m after it; the corners
+  and the straights add up to the official lap time gap. See `backend/paddock/telemetry.py`.
+- **Race pace ranking**: median and middle half (25th to 75th percentile) of each driver's fuel-corrected green-flag
+  laps; drivers with fewer than five such laps are not ranked.
 
 ## Data and licences
 

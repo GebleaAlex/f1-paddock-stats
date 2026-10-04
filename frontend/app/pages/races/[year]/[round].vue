@@ -279,6 +279,7 @@ usePageMeta({
 
       <!-- Pace and strategy -->
       <template v-else-if="view === 'pace'">
+        <RacePaceRanking :year="year" :round="round" :picked="picked" @toggle="togglePicked" />
         <RacePace :year="year" :round="round" :drivers="picked" :names="driverNames" />
         <div class="pickers panel">
           <div class="spread">

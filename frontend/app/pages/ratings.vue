@@ -83,7 +83,7 @@ const at = (v: number) => `${((v - scale.value.lo) / scale.value.span) * 100}%`
             <div class="scale" role="img" :aria-label="`Rating ${r.skill.toFixed(2)}, range ${r.low.toFixed(2)} to ${r.high.toFixed(2)}`">
               <span class="zero" :style="{ left: at(0) }" />
               <span class="range" :style="{ left: at(r.low), width: `calc(${at(r.high)} - ${at(r.low)})` }" />
-              <span class="dot" :style="{ left: at(r.skill) }" />
+              <span class="marker" :style="{ left: at(r.skill) }" />
             </div>
             <span class="value num">{{ r.skill > 0 ? '+' : '' }}{{ r.skill.toFixed(2) }}</span>
           </li>
@@ -149,7 +149,7 @@ const at = (v: number) => `${((v - scale.value.lo) / scale.value.span) * 100}%`
   border-radius: 3px;
   background: color-mix(in srgb, var(--series-1) 30%, transparent);
 }
-.dot {
+.marker {
   position: absolute;
   top: 3px;
   width: 12px;

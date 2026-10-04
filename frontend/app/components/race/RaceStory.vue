@@ -76,7 +76,7 @@ const LABEL: Record<StoryEvent['kind'], string> = {
         <span><i class="band sc" /> Safety car</span>
         <span><i class="band vsc" /> Virtual safety car</span>
         <span><i class="band red" /> Red flag</span>
-        <span><i class="dot" /> Pit stop</span>
+        <span><i class="marker" /> Pit stop</span>
       </div>
     </Panel>
     <Panel class="span-4 timeline-panel" title="What happened" flush>
@@ -118,7 +118,7 @@ const LABEL: Record<StoryEvent['kind'], string> = {
 .band.sc { background: rgba(250, 178, 25, 0.45); }
 .band.vsc { background: rgba(250, 178, 25, 0.22); }
 .band.red { background: rgba(208, 59, 59, 0.4); }
-.dot {
+.marker {
   width: 8px;
   height: 8px;
   border-radius: 50%;

@@ -486,6 +486,7 @@ export interface TelemetryLap {
   x: number[]
   y: number[]
   sectors: { s1_ms: number | null; s2_ms: number | null; s3_ms: number | null; compound: string | null; tyre_life: number | null } | null
+  telemetry_gaps?: boolean
 }
 
 export interface Corner {
@@ -501,7 +502,22 @@ export interface Corner {
  * Two laps on one distance axis, as stacked panels sharing the crosshair: speed (with corner numbers), the time gap,
  * throttle, brake and gear. One chart per channel keeps each on its own scale (never two y-axes on one chart).
  */
-export function telemetryOption(laps: TelemetryLap[], delta: number[] | undefined, corners: Corner[], colors: string[]): EChartsOption {
+export function telemetryOption(
+  laps: TelemetryLap[],
+  delta: number[] | undefined,
+  corners: Corner[],
+  colors: string[],
+  bands: { focus?: [number, number] | null; gaps?: [number, number][] } = {},
+): EChartsOption {
+  // Shaded stretches on every panel: the corner picked in the corner table, and telemetry dropouts.
+  const areas = [
+    ...(bands.gaps ?? []).map(([from, to]) => [
+      { xAxis: from, itemStyle: { color: 'rgba(128,128,128,0.16)' }, label: { show: false } },
+      { xAxis: to },
+    ]),
+    ...(bands.focus ? [[{ xAxis: bands.focus[0], itemStyle: { color: 'rgba(42,120,214,0.14)' } }, { xAxis: bands.focus[1] }]] : []),
+  ]
+  const markArea = areas.length ? { silent: true, data: areas } : undefined
   const panels = [
     { key: 'speed', label: 'Speed (km/h)', height: 34 },
     { key: 'delta', label: 'Gap (s)', height: 14 },
@@ -557,6 +573,7 @@ export function telemetryOption(laps: TelemetryLap[], delta: number[] | undefine
         lineStyle: { width: 2 },
         areaStyle: { opacity: 0.1 },
         data: base.distance.map((d, i) => [d, delta![i]]),
+        ...(markArea ? { markArea } : {}),
         markLine: { silent: true, symbol: 'none', lineStyle: { color: cssVar('--axis'), type: 'solid' }, label: { show: false }, data: [{ yAxis: 0 }] },
       } as SeriesOption)
       return
@@ -574,6 +591,7 @@ export function telemetryOption(laps: TelemetryLap[], delta: number[] | undefine
         color: colors[li],
         lineStyle: { width: p.key === 'speed' ? 2 : 1.5 },
         data: lap.distance.map((d, i) => [d, values[i]]),
+        ...(li === 0 && markArea ? { markArea } : {}),
         ...(p.key === 'speed' && li === 0 && corners.length
           ? {
               markLine: {
