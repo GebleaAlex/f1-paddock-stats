@@ -1,0 +1,36 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+.pytest_cache/
+.ruff_cache/
+*.egg-info/
+
+# Node / Nuxt
+node_modules/
+.nuxt/
+.output/
+.data/
+dist/
+*.tsbuildinfo
+
+# Data: downloaded sources and the built database are rebuilt with `paddock update`
+/data/raw/
+/data/timing/
+/data/fastf1-cache/
+/data/*.duckdb
+/data/*.building
+/data/*.wal
+/data/paddock.current
+/data/*.log
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.log
+.env
+
+# Local working notes for AI assistants
+CLAUDE.md

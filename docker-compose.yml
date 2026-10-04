@@ -1,0 +1,36 @@
+# docker compose up --build
+# The first start downloads the data and builds the database (about a minute); later starts reuse the volume.
+# Refresh after a race weekend with: docker compose run --rm pipeline
+# Add 2018+ tyres, safety cars and telemetry (resumable, about 40 sessions an hour):
+#   docker compose run --rm pipeline paddock timing --years 2026 2025 2024 --wait
+services:
+  pipeline:
+    build: ./backend
+    command: ["paddock", "update"]
+    volumes:
+      - paddock-data:/data
+    restart: "no"
+
+  api:
+    build: ./backend
+    depends_on:
+      pipeline:
+        condition: service_completed_successfully
+    volumes:
+      - paddock-data:/data
+    ports:
+      - "8020:8020"
+
+  web:
+    build: ./frontend
+    depends_on:
+      - api
+    environment:
+      NUXT_API_BASE: http://api:8020
+      # Public address of the site, used in social preview links.
+      NUXT_PUBLIC_SITE_URL: http://localhost:3000
+    ports:
+      - "3000:3000"
+
+volumes:
+  paddock-data:

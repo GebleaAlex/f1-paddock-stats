@@ -1,0 +1,56 @@
+[project]
+name = "paddock-stats"
+version = "0.1.0"
+description = "Builds a DuckDB database of Formula 1 history from f1db and Jolpica and serves it over a FastAPI API."
+requires-python = ">=3.12,<3.14"
+license = { text = "Apache-2.0" }
+dependencies = [
+  "duckdb>=1.4",
+  "numpy>=2.0",
+  "fastapi[standard]>=0.115",
+  "httpx>=0.27",
+  "pillow>=11",
+]
+
+[project.scripts]
+paddock = "paddock.cli:main"
+
+[project.optional-dependencies]
+# 2018+ timing, tyres and telemetry through FastF1 (only needed to run `paddock telemetry`).
+telemetry = [
+  "fastf1>=3.6",
+]
+# MCP server so assistants such as Claude can query the data (`paddock mcp`).
+mcp = [
+  "mcp>=2.0",
+]
+
+[dependency-groups]
+dev = [
+  "pytest>=8",
+  "ruff>=0.6",
+]
+
+[tool.uv]
+# Security floor for a transitive dependency of FastF1 (PYSEC-2026-3625, fixed in msgpack 1.2.1).
+constraint-dependencies = ["msgpack>=1.2.1"]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["paddock"]
+
+[tool.ruff]
+line-length = 120
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM"]
+# SQL lives in long triple-quoted strings; the formatter keeps the Python itself within the line length.
+ignore = ["E501"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"

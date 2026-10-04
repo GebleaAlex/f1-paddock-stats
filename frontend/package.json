@@ -1,0 +1,25 @@
+{
+  "name": "paddock-stats-frontend",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "nuxt dev --port 3000",
+    "build": "nuxt build",
+    "preview": "node .output/server/index.mjs",
+    "postinstall": "nuxt prepare",
+    "typecheck": "nuxt typecheck",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "echarts": "^6.1.0",
+    "nuxt": "^4.5.2",
+    "vue": "^3.5.43",
+    "vue-echarts": "^8.3.1",
+    "vue-router": "^5.3.1"
+  },
+  "devDependencies": {
+    "typescript": "~6.0.3",
+    "vitest": "^5.0.3",
+    "vue-tsc": "^3.3.12"
+  }
+}
