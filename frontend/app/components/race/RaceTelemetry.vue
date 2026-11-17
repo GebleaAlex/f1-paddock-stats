@@ -111,6 +111,18 @@ const sectorsWon = computed(() => {
 function sector(ms: number | null | undefined) {
   return ms ? (ms / 1000).toFixed(3) : '–'
 }
+// Sector times side by side under the track map: who was quicker in each third of the lap, and by how much.
+const sectorRows = computed(() => {
+  const [x, y] = laps.value
+  if (!x || !y) return []
+  return (['s1_ms', 's2_ms', 's3_ms'] as const).flatMap((k, i) => {
+    const ta = x.sectors?.[k]
+    const tb = y.sectors?.[k]
+    if (!ta || !tb) return []
+    const winner = ta === tb ? -1 : ta < tb ? 0 : 1
+    return [{ label: `Sector ${i + 1}`, times: [ta, tb], winner, diff: Math.abs(tb - ta) / 1000 }]
+  })
+})
 const is2026 = computed(() => props.year >= 2026)
 </script>
 
@@ -127,7 +139,7 @@ const is2026 = computed(() => props.year >= 2026)
         <UiSelect v-model="bModel" label="Driver" :options="driverOptions" searchable />
       </div>
 
-      <div v-if="ready" class="cards">
+      <div v-if="ready" class="cards" :class="{ single: laps.length !== 2 }">
         <div v-for="(lap, i) in laps" :key="lap.driver_id" class="lap-card panel">
           <div class="spread">
             <div class="row">
@@ -137,7 +149,7 @@ const is2026 = computed(() => props.year >= 2026)
             <span class="small muted">Lap {{ lap.lap }}</span>
           </div>
           <div class="time">{{ lapTime(lap.lap_time_ms) }}</div>
-          <div class="small ink-2 num">
+          <div v-if="!sectorRows.length" class="small ink-2 num">
             S1 {{ sector(lap.sectors?.s1_ms) }} · S2 {{ sector(lap.sectors?.s2_ms) }} · S3 {{ sector(lap.sectors?.s3_ms) }}
           </div>
           <div v-if="lap.telemetry_gaps" class="small warn-line">The speed trace drops out in places on this lap (shaded grey); the laps are matched by position on track instead.</div>
@@ -161,6 +173,21 @@ const is2026 = computed(() => props.year >= 2026)
         <Panel class="span-5" title="Track map" note="Each section is coloured by the faster driver. Press play to replay both laps.">
           <RaceTrackMap v-if="ready" :laps="laps" :rotation="cmp!.session.rotation" :corners="cmp!.session.corners" :dominance="cmp!.dominance" :colors="templateColors" />
           <div v-else class="skeleton" style="aspect-ratio: 1.15" />
+          <div v-if="ready && sectorRows.length" class="sectors num">
+            <div class="sector-row sector-head">
+              <span />
+              <span v-for="(lap, i) in laps" :key="lap.driver_id" class="r"><span class="swatch" :style="{ background: templateColors[i] }" /> {{ lap.abbreviation ?? lap.name }}</span>
+              <span class="r">Quicker by</span>
+            </div>
+            <div v-for="row in sectorRows" :key="row.label" class="sector-row">
+              <span class="ink-2">{{ row.label }}</span>
+              <span v-for="(t, i) in row.times" :key="i" class="r" :class="{ best: row.winner === i }">{{ sector(t) }}</span>
+              <span class="r">
+                <template v-if="row.winner < 0">level</template>
+                <template v-else><span class="swatch" :style="{ background: templateColors[row.winner] }" /> {{ row.diff.toFixed(3) }}s</template>
+              </span>
+            </div>
+          </div>
         </Panel>
         <Panel class="span-7" title="Telemetry" :note="laps.length === 2 ? `Gap: time ${laps[1]?.abbreviation} is behind ${laps[0]?.abbreviation} at each point; it grows where ${laps[0]?.abbreviation} is quicker.` : 'Speed, throttle, brake and gear along the lap.'">
           <Chart v-if="ready" :option="chart" :height="620" :compact-height="560" label="Speed, gap, throttle, brake and gear along the lap" share-id="telemetry" />
@@ -327,13 +354,51 @@ const is2026 = computed(() => props.year >= 2026)
 .vs {
   flex: none !important;
 }
+/* Same twelve columns as the panels below, so the first lap card is exactly as wide as the track map under it. */
 .cards {
   display: grid;
-  grid-template-columns: 1fr 1fr auto;
-  gap: 12px;
+  grid-template-columns: repeat(12, minmax(0, 1fr));
+  gap: var(--gap);
 }
 .lap-card {
+  grid-column: span 5;
   gap: 4px;
+}
+.cards.single .lap-card {
+  grid-column: span 12;
+}
+.sectors {
+  display: grid;
+  border-top: 1px solid var(--grid);
+  padding-top: 6px;
+  font-size: 13px;
+}
+.sector-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1.2fr) repeat(3, minmax(0, 1fr));
+  align-items: center;
+  gap: 8px;
+  padding: 6px 0;
+}
+.sector-row + .sector-row {
+  border-top: 1px solid var(--grid);
+}
+.sector-head {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--muted);
+}
+.sector-row .r {
+  text-align: right;
+  white-space: nowrap;
+}
+.sector-row .best {
+  font-weight: 700;
+  color: var(--ink);
+}
+.sector-row .swatch {
+  display: inline-block;
+  vertical-align: baseline;
 }
 .time {
   font-size: 26px;
@@ -342,20 +407,28 @@ const is2026 = computed(() => props.year >= 2026)
   font-variant-numeric: tabular-nums;
 }
 .gap {
+  grid-column: span 2;
   align-items: center;
   justify-content: center;
   gap: 2px;
-  min-width: 140px;
 }
 .big {
   font-size: 26px;
 }
-@media (max-width: 900px) {
+@media (max-width: 1080px) {
   .cards {
     grid-template-columns: 1fr 1fr;
+    gap: 12px;
   }
+  .lap-card,
+  .cards.single .lap-card {
+    grid-column: auto;
+  }
+  .cards.single .lap-card,
   .gap {
     grid-column: 1 / -1;
+  }
+  .gap {
     flex-direction: row;
     gap: 10px;
   }
@@ -363,6 +436,9 @@ const is2026 = computed(() => props.year >= 2026)
 @media (max-width: 640px) {
   .cards {
     grid-template-columns: 1fr;
+  }
+  .lap-card {
+    grid-column: 1 / -1;
   }
 }
 </style>

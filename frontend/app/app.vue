@@ -139,7 +139,7 @@ useSeoMeta({
         </p>
         <p>
           Created by Alex Geblea. The code is
-          <a class="link" href="https://github.com/GebleaAlex/Formula-1-F1-Paddock-Stats" rel="noopener">on GitHub</a>
+          <a class="link" href="https://github.com/GebleaAlex/f1-paddock-stats" rel="noopener">on GitHub</a>
           under the Apache License 2.0.
         </p>
       </div>

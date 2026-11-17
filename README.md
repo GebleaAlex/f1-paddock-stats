@@ -7,7 +7,11 @@ any view can be shared as a link, and the main charts can be downloaded or embed
 
 Free, non-commercial and open source. Unofficial: not associated with the Formula 1 companies.
 
-![Telemetry comparison of two qualifying laps](docs/telemetry.png)
+[What it does](#what-it-does) · [How it works](#how-it-works) · [Running locally](#running-locally) ·
+[MCP server](#ask-the-data-from-claude-mcp) · [How the numbers are calculated](#how-the-numbers-are-calculated) ·
+[Data and licences](#data-and-licences)
+
+![Two qualifying laps compared: lap times, a track map coloured by the faster driver, sector times and the speed, gap, throttle, brake and gear traces](docs/telemetry.png)
 
 ## What it does
 
@@ -33,9 +37,9 @@ Free, non-commercial and open source. Unofficial: not associated with the Formul
 - **Strategy simulator (2018+).** What if a driver had stopped two laps earlier, stopped once more, or fitted other
   tyres? A tyre model fitted on the race itself gives the new race time, finishing position and the best stop laps.
 - **Telemetry (2018+).** Any two drivers' fastest laps in a session: speed, time gap, throttle, brake and gear along the
-  lap, a track map coloured by the faster driver in each section with a replay of both laps, **time gained corner by
-  corner** with minimum speeds and braking points, sectors, top speed and clipping (the 2026 power units' energy
-  limit).
+  lap, a track map coloured by the faster driver in each section with a replay of both laps, sector times side by
+  side, **time gained corner by corner** with minimum speeds and braking points, top speed and clipping (the 2026
+  power units' energy limit).
 - **Qualifying.** Best sectors, the ideal lap each driver had in them, and the time left on the table.
 
 **Comparisons and tools**
@@ -46,17 +50,57 @@ Free, non-commercial and open source. Unofficial: not associated with the Formul
 - **Car and team rating.** Every car since 1950 as a gap to the fastest car of its season, from qualifying pace with
   the drivers taken out: the most dominant cars and the teams whose cars were usually fastest.
 - **Stat explorer.** Filter every result by years, circuit, team, driver, teammate, starting position and starting tyre,
-  group it by driver, team, season or circuit, and share the answer as a link.
+  group it by driver, team, season or circuit, sort by any column, and share the answer as a link.
+- **Search and filters.** One search box for drivers, teams, circuits and seasons (accents ignored), and name filters
+  on the driver, team, circuit and teammate lists.
+- **Phones and keyboards.** Every page is laid out for a 390px screen, and tabs, dropdowns, sortable tables and the
+  search work from the keyboard.
 - **Sharing.** Every page has its own social preview card with its key numbers, and the main charts can be
   downloaded as images, linked to directly or embedded in another site.
 - **MCP server.** Ask the data questions from Claude or any other MCP client.
 
-| | |
-| --- | --- |
-| ![Race story with safety-car periods](docs/race-story.png) | ![Tyre strategy](docs/strategy.png) |
-| ![Driver rating across eras](docs/ratings.png) | ![Stat explorer](docs/explore.png) |
-| ![Strategy simulator](docs/simulator.png) | ![Car rating across eras](docs/cars.png) |
-| ![Season page with title chances](docs/season.png) | ![Teammate head-to-head](docs/head-to-head.png) |
+<table>
+  <tr>
+    <td width="50%" align="center" valign="top">
+      <img src="docs/race-story.png" alt="Race story: lap chart with safety-car periods and a timeline of what happened" width="100%" /><br/>
+      <sub><b>Race story</b> · lap chart with safety-car periods and a timeline of what happened</sub>
+    </td>
+    <td width="50%" align="center" valign="top">
+      <img src="docs/strategy.png" alt="Tyre strategy: stints by compound, pit-stop loss, undercuts and overcuts" width="100%" /><br/>
+      <sub><b>Tyre strategy</b> · stints by compound, pit-stop loss, undercuts and overcuts</sub>
+    </td>
+  </tr>
+  <tr>
+    <td width="50%" align="center" valign="top">
+      <img src="docs/ratings.png" alt="Driver rating across eras: built only from teammate comparisons, with 90% ranges" width="100%" /><br/>
+      <sub><b>Driver rating across eras</b> · built only from teammate comparisons, with 90% ranges</sub>
+    </td>
+    <td width="50%" align="center" valign="top">
+      <img src="docs/explore.png" alt="Stat explorer: filter, group and sort every result since 1950" width="100%" /><br/>
+      <sub><b>Stat explorer</b> · filter, group and sort every result since 1950</sub>
+    </td>
+  </tr>
+  <tr>
+    <td width="50%" align="center" valign="top">
+      <img src="docs/simulator.png" alt="Strategy simulator: move a stop or change tyres and see the new result" width="100%" /><br/>
+      <sub><b>Strategy simulator</b> · move a stop or change tyres and see the new result</sub>
+    </td>
+    <td width="50%" align="center" valign="top">
+      <img src="docs/cars.png" alt="Car rating across eras: the fastest car of every season, drivers taken out" width="100%" /><br/>
+      <sub><b>Car rating across eras</b> · the fastest car of every season, drivers taken out</sub>
+    </td>
+  </tr>
+  <tr>
+    <td width="50%" align="center" valign="top">
+      <img src="docs/season.png" alt="Season: standings, points after every round and title chances" width="100%" /><br/>
+      <sub><b>Season</b> · standings, points after every round and title chances</sub>
+    </td>
+    <td width="50%" align="center" valign="top">
+      <img src="docs/head-to-head.png" alt="Teammate head-to-head: qualifying, race and points duels for any pairing" width="100%" /><br/>
+      <sub><b>Teammate head-to-head</b> · qualifying, race and points duels for any pairing</sub>
+    </td>
+  </tr>
+</table>
 
 ## How it works
 
@@ -127,8 +171,8 @@ Interactive documentation at `/api/docs` when the API is running. The main route
 Prerequisites: Python 3.12, Node 24 and [uv](https://docs.astral.sh/uv/).
 
 ```bash
-git clone https://github.com/GebleaAlex/Formula-1-F1-Paddock-Stats.git
-cd Formula-1-F1-Paddock-Stats
+git clone https://github.com/GebleaAlex/f1-paddock-stats.git
+cd f1-paddock-stats
 ```
 
 ```bash
@@ -160,7 +204,7 @@ simulator, race pace rankings, drivers, teammate head-to-heads, comparisons, rec
 odds, safety cars and weather per circuit, qualifying analysis and lap comparisons. For Claude Code:
 
 ```bash
-claude mcp add paddock-stats -- uv --directory /path/to/Formula-1-F1-Paddock-Stats/backend run paddock mcp
+claude mcp add paddock-stats -- uv --directory /path/to/f1-paddock-stats/backend run paddock mcp
 ```
 
 For Claude Desktop, add the same command to `claude_desktop_config.json` under `mcpServers`.
