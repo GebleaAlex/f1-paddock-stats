@@ -69,3 +69,8 @@ export function listing(items: string[]): string {
   if (items.length < 2) return items.join('')
   return `${items.slice(0, -1).join(', ')} and ${items[items.length - 1]}`
 }
+
+/** Lower-case and strip accents, so "perez" matches "Pérez" in the name filters. */
+export function fold(text: string | null | undefined): string {
+  return (text ?? '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '')
+}

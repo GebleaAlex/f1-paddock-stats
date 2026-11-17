@@ -86,9 +86,11 @@ const driverOptions = computed(() => [
   ...(driverList.value ?? []).filter((d) => d.starts > 0).map((d) => ({ value: d.id, label: d.name, sub: years(d.first_year, d.last_year) })),
 ])
 
+// "From 2020 to 2010" means the same years as "from 2010 to 2020", not an empty answer.
+const span = computed(() => (Number(from.value) > Number(to.value) ? [to.value, from.value] : [from.value, to.value]) as [string, string])
 const url = computed(() => {
   const g = GRIDS[grid.value] ?? GRIDS.any!
-  const q = new URLSearchParams({ group: group.value, from: from.value, to: to.value, sort: sort.value, min_races: minRaces.value, limit: '100' })
+  const q = new URLSearchParams({ group: group.value, from: span.value[0], to: span.value[1], sort: sort.value, min_races: minRaces.value, limit: '100' })
   if (circuit.value) q.set('circuit', circuit.value)
   if (team.value) q.set('constructor', team.value)
   if (driver.value) q.set('driver', driver.value)
@@ -111,7 +113,7 @@ const sentence = computed(() => {
   if (circuit.value) parts.push(`at ${label(circuitOptions.value, circuit.value)}`)
   if (grid.value !== 'any') parts.push(`starting ${GRIDS[grid.value]!.label.toLowerCase().replace('pole', 'from pole')}`)
   if (tyre.value) parts.push(`on ${compound(tyre.value).label.toLowerCase()} tyres at the start`)
-  parts.push(from.value === to.value ? `in ${from.value}` : `from ${from.value} to ${to.value}`)
+  parts.push(span.value[0] === span.value[1] ? `in ${span.value[0]}` : `from ${span.value[0]} to ${span.value[1]}`)
   return parts.join(' ')
 })
 
@@ -131,18 +133,39 @@ const activeFilters = computed(
 function reset() {
   navigateTo('/explore')
 }
-const copied = ref(false)
+const copied = ref<'' | 'yes' | 'no'>('')
+let copiedTimer: ReturnType<typeof setTimeout> | undefined
 async function copy() {
-  await navigator.clipboard.writeText(location.href)
-  copied.value = true
-  setTimeout(() => (copied.value = false), 1600)
+  copied.value = (await copyText(location.href)) ? 'yes' : 'no'
+  clearTimeout(copiedTimer)
+  copiedTimer = setTimeout(() => (copied.value = ''), 1600)
+}
+onBeforeUnmount(() => clearTimeout(copiedTimer))
+
+// Column headers sort the table. The order is decided by the API (most first, except average finish: best first),
+// so a header is either the current order or a button to make it so.
+const COLUMN_SORT: Record<string, 'descending' | 'ascending'> = {
+  races: 'descending', wins: 'descending', podiums: 'descending', poles: 'descending', points: 'descending',
+  win_rate: 'descending', avg_finish: 'ascending', gained: 'descending', dnfs: 'descending',
+}
+function th(id: string) {
+  return {
+    'aria-sort': sort.value === id ? COLUMN_SORT[id] : undefined,
+    tabindex: 0,
+    onClick: () => (sort.value = id),
+    onKeydown: (e: KeyboardEvent) => {
+      if (e.key !== 'Enter' && e.key !== ' ') return
+      e.preventDefault()
+      sort.value = id
+    },
+  }
 }
 </script>
 
 <template>
   <div>
     <PageHeader title="Stat explorer" sub="Filter every race result since 1950 and group it your way. The link always reproduces the answer.">
-      <button class="btn" type="button" @click="copy"><Icon :name="copied ? 'check' : 'link'" :size="16" /> {{ copied ? 'Link copied' : 'Copy link' }}</button>
+      <button class="btn" type="button" @click="copy"><Icon :name="copied === 'yes' ? 'check' : 'link'" :size="16" /> <span aria-live="polite">{{ copied === 'yes' ? 'Link copied' : copied === 'no' ? 'Could not copy' : 'Copy link' }}</span></button>
     </PageHeader>
 
     <section class="panel builder">
@@ -174,9 +197,9 @@ async function copy() {
         <table v-if="data?.rows.length" class="data">
           <thead>
             <tr>
-              <th class="r">#</th><th>{{ label(GROUPS, group) }}</th><th class="r">Races</th><th class="r">Wins</th>
-              <th class="r hide-sm">Podiums</th><th class="r hide-sm">Poles</th><th class="r hide-md">Points</th>
-              <th class="r hide-sm">Win rate</th><th class="r hide-md">Avg finish</th><th class="r hide-md">Places gained</th><th class="r hide-md">Retired</th>
+              <th class="r">#</th><th>{{ label(GROUPS, group) }}</th><th class="r sortable" v-bind="th('races')">Races</th><th class="r sortable" v-bind="th('wins')">Wins</th>
+              <th class="r sortable hide-sm" v-bind="th('podiums')">Podiums</th><th class="r sortable hide-sm" v-bind="th('poles')">Poles</th><th class="r sortable hide-md" v-bind="th('points')">Points</th>
+              <th class="r sortable hide-sm" v-bind="th('win_rate')">Win rate</th><th class="r sortable hide-md" v-bind="th('avg_finish')">Avg finish</th><th class="r sortable hide-md" v-bind="th('gained')">Places gained</th><th class="r sortable hide-md" v-bind="th('dnfs')">Retired</th>
             </tr>
           </thead>
           <tbody>
@@ -192,8 +215,8 @@ async function copy() {
               <td class="r hide-sm">{{ r.poles || '' }}</td>
               <td class="r hide-md">{{ r.points ? points(r.points) : '' }}</td>
               <td class="r hide-sm">{{ r.win_rate ? `${r.win_rate}%` : '' }}</td>
-              <td class="r hide-md">{{ r.avg_finish ?? '–' }}</td>
-              <td class="r hide-md">{{ r.avg_gained != null ? (r.avg_gained > 0 ? `+${r.avg_gained}` : r.avg_gained) : '–' }}</td>
+              <td class="r hide-md">{{ r.avg_finish != null ? r.avg_finish.toFixed(2) : '–' }}</td>
+              <td class="r hide-md">{{ r.avg_gained != null ? `${r.avg_gained > 0 ? '+' : r.avg_gained < 0 ? '−' : ''}${Math.abs(r.avg_gained).toFixed(2)}` : '–' }}</td>
               <td class="r hide-md">{{ r.dnfs || '' }}</td>
             </tr>
           </tbody>
@@ -213,6 +236,9 @@ async function copy() {
   grid-template-columns: repeat(auto-fill, minmax(min(220px, 100%), 1fr));
   gap: 8px;
   align-items: center;
+}
+.controls > .btn {
+  justify-self: start;
 }
 .more-toggle {
   display: none;

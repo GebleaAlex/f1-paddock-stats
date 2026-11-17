@@ -31,11 +31,27 @@ const filtered = computed(() => {
   return q ? props.options.filter((o) => `${o.label} ${o.sub ?? ''}`.toLowerCase().includes(q)) : props.options
 })
 
+// The popover opens from the button's left edge. Near the right edge of the window, or of a panel that clips
+// its content, it would be cut off, so it is aligned to the button's right edge instead.
+const alignRight = ref(false)
+function place() {
+  alignRight.value = false
+  const pop = root.value?.querySelector<HTMLElement>('.pop')
+  const layer = root.value?.querySelector<HTMLElement>('.layer')
+  if (!pop || !layer || getComputedStyle(layer).position === 'fixed') return
+  const clip = root.value?.closest<HTMLElement>('.flush')?.getBoundingClientRect()
+  const limit = Math.min(window.innerWidth, clip?.right ?? Infinity) - 8
+  const button = root.value!.getBoundingClientRect()
+  // Only when it also fits that way round: on a narrow panel, left-aligned and partly visible is the better of two.
+  alignRight.value = button.left + pop.offsetWidth > limit && button.right - pop.offsetWidth >= Math.max(0, clip?.left ?? 0) + 8
+}
 async function show() {
   open.value = true
   query.value = ''
+  typedAt = 0
   active.value = Math.max(0, filtered.value.findIndex((o) => o.value === props.modelValue))
   await nextTick()
+  place()
   if (canSearch.value) search.value?.focus()
   else list.value?.focus()
   scrollActive()
@@ -52,18 +68,40 @@ function pick(o: SelectOption | undefined) {
 function scrollActive() {
   nextTick(() => list.value?.querySelector('.on-active')?.scrollIntoView({ block: 'nearest' }))
 }
+// Lists without a search box: typing letters jumps to the first option that starts with them.
+let typed = ''
+let typedAt = 0
+function typeAhead(char: string) {
+  const now = Date.now()
+  typed = now - typedAt > 700 ? char : typed + char
+  typedAt = now
+  const i = filtered.value.findIndex((o) => o.label.toLowerCase().startsWith(typed.toLowerCase()))
+  if (i >= 0) {
+    active.value = i
+    scrollActive()
+  }
+}
 function onKey(e: KeyboardEvent) {
+  const inSearch = e.target === search.value
   if (e.key === 'ArrowDown') {
     active.value = Math.min(active.value + 1, filtered.value.length - 1)
     scrollActive()
   } else if (e.key === 'ArrowUp') {
     active.value = Math.max(active.value - 1, 0)
     scrollActive()
-  } else if (e.key === 'Enter') {
+  } else if (e.key === 'Home' && !inSearch) {
+    active.value = 0
+    scrollActive()
+  } else if (e.key === 'End' && !inSearch) {
+    active.value = Math.max(0, filtered.value.length - 1)
+    scrollActive()
+  } else if (e.key === 'Enter' || (e.key === ' ' && !inSearch && Date.now() - typedAt > 700)) {
     pick(filtered.value[active.value])
   } else if (e.key === 'Escape' || e.key === 'Tab') {
     hide(e.key === 'Escape')
     return
+  } else if (!inSearch && e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey) {
+    typeAhead(e.key)
   } else return
   e.preventDefault()
 }
@@ -82,7 +120,7 @@ function groupStart(i: number) {
 </script>
 
 <template>
-  <div ref="root" class="ui-select" :class="{ block, open }">
+  <div ref="root" class="ui-select" :class="{ block, open, 'align-right': alignRight }">
     <button
       type="button"
       class="trigger"
@@ -107,12 +145,13 @@ function groupStart(i: number) {
             <b v-if="label">{{ label }}</b>
           </div>
           <div v-if="canSearch" class="search">
-            <input ref="search" v-model="query" type="search" placeholder="Search" :aria-label="`Search ${label ?? 'options'}`" aria-autocomplete="list" :aria-controls="id">
+            <input ref="search" v-model="query" type="search" placeholder="Search" :aria-label="`Search ${label ?? 'options'}`" role="combobox" aria-expanded="true" aria-autocomplete="list" :aria-controls="id" :aria-activedescendant="filtered.length ? `${id}-${active}` : undefined" autocomplete="off">
           </div>
-          <ul :id="id" ref="list" class="options" role="listbox" tabindex="-1" :aria-label="label">
+          <ul :id="id" ref="list" class="options" role="listbox" tabindex="-1" :aria-label="label" :aria-activedescendant="filtered.length ? `${id}-${active}` : undefined">
             <template v-for="(o, i) in filtered" :key="o.value">
               <li v-if="groupStart(i)" class="group" role="presentation">{{ groupStart(i) }}</li>
               <li
+                :id="`${id}-${i}`"
                 role="option"
                 :aria-selected="o.value === modelValue"
                 :class="{ 'on-active': i === active, selected: o.value === modelValue }"
@@ -201,6 +240,12 @@ function groupStart(i: number) {
   box-shadow: var(--shadow-lg);
   overflow: hidden;
 }
+@media (min-width: 641px) {
+  .ui-select.align-right .layer {
+    left: auto;
+    right: 0;
+  }
+}
 .ui-select.block .layer,
 .ui-select.block .pop {
   width: 100%;
@@ -230,6 +275,7 @@ function groupStart(i: number) {
   padding: 6px;
   max-height: 320px;
   overflow-y: auto;
+  overscroll-behavior: contain;
   outline: none;
 }
 .options li[role='option'] {

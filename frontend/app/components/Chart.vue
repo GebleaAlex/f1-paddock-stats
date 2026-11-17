@@ -126,13 +126,39 @@ function pageUrl(extra: Record<string, string> = {}) {
   for (const [k, v] of Object.entries(extra)) url.searchParams.set(k, v)
   return url
 }
+let flashTimer: ReturnType<typeof setTimeout> | undefined
 function flash(text: string) {
   done.value = text
-  setTimeout(() => {
+  clearTimeout(flashTimer)
+  flashTimer = setTimeout(() => {
     done.value = ''
     menu.value = false
   }, 1400)
 }
+// The menu closes on a click or tap anywhere else and on Escape (it used to close only when a mouse left it,
+// so on a touch screen it stayed open). The listeners exist only while it is open.
+function closeOutside(e: PointerEvent) {
+  if (!(e.target instanceof Node) || !root.value?.querySelector('.share')?.contains(e.target)) menu.value = false
+}
+function closeOnEscape(e: KeyboardEvent) {
+  if (e.key !== 'Escape') return
+  menu.value = false
+  root.value?.querySelector<HTMLButtonElement>('.share-btn')?.focus()
+}
+function unlisten() {
+  document.removeEventListener('pointerdown', closeOutside)
+  document.removeEventListener('keydown', closeOnEscape)
+}
+watch(menu, (open) => {
+  unlisten()
+  if (!open) return
+  document.addEventListener('pointerdown', closeOutside)
+  document.addEventListener('keydown', closeOnEscape)
+})
+onBeforeUnmount(() => {
+  unlisten()
+  clearTimeout(flashTimer)
+})
 function download() {
   const url = vchart.value?.getDataURL({ type: 'png', pixelRatio: 2, backgroundColor: token('--surface') })
   if (!url) return
@@ -146,16 +172,14 @@ function download() {
 async function copyLink() {
   const url = pageUrl()
   url.hash = domId.value ?? ''
-  await navigator.clipboard.writeText(url.toString())
-  flash('Link copied')
+  flash((await copyText(url.toString())) ? 'Link copied' : 'Could not copy the link')
 }
 async function copyEmbed() {
   const url = pageUrl({ embed: props.shareId! })
   const h = (root.value?.offsetHeight ?? 360) + 90
-  const title = `${props.label ?? 'Chart'} · Paddock Stats`
+  const title = `${props.label ?? 'Chart'} · Paddock Stats`.replace(/"/g, '&quot;')
   const code = `<iframe src="${url}" width="100%" height="${h}" style="border:0" loading="lazy" title="${title}"></iframe>`
-  await navigator.clipboard.writeText(code)
-  flash('Embed code copied')
+  flash((await copyText(code)) ? 'Embed code copied' : 'Could not copy the code')
 }
 function isolate() {
   // Hide everything on the page except the panel holding this chart.
@@ -172,17 +196,20 @@ onMounted(() => {
 </script>
 
 <template>
-  <div :id="domId" ref="root" class="chart" :style="style" role="img" :aria-label="label">
-    <ClientOnly>
-      <VChart v-if="ready" ref="vchart" :key="themeName" :option="finalOption" :theme="themeName" autoresize :update-options="{ notMerge: true }" />
-      <template #fallback><div class="skeleton" style="height: 100%" /></template>
-    </ClientOnly>
+  <div :id="domId" ref="root" class="chart" :style="style">
+    <!-- role="img" sits on the drawing only: on the wrapper it would hide the share button from screen readers. -->
+    <div class="plot" role="img" :aria-label="label">
+      <ClientOnly>
+        <VChart v-if="ready" ref="vchart" :key="themeName" :option="finalOption" :theme="themeName" autoresize :update-options="{ notMerge: true }" />
+        <template #fallback><div class="skeleton" style="height: 100%" /></template>
+      </ClientOnly>
+    </div>
     <div v-if="shareId && !route.query.embed" class="share">
-      <button class="btn ghost icon share-btn" type="button" aria-label="Share this chart" :aria-expanded="menu" @click="menu = !menu">
+      <button class="btn ghost icon share-btn" type="button" aria-label="Share this chart" aria-haspopup="menu" :aria-expanded="menu" @click="menu = !menu">
         <svg width="16" height="16" viewBox="0 0 24 24" aria-hidden="true"><circle cx="5" cy="12" r="1.8" fill="currentColor" /><circle cx="12" cy="12" r="1.8" fill="currentColor" /><circle cx="19" cy="12" r="1.8" fill="currentColor" /></svg>
       </button>
       <div v-if="menu" class="share-menu" role="menu" @mouseleave="menu = false">
-        <p v-if="done" class="small done">{{ done }}</p>
+        <p v-if="done" class="small done" role="status">{{ done }}</p>
         <template v-else>
           <button type="button" role="menuitem" @click="download">Download image</button>
           <button type="button" role="menuitem" @click="copyLink">Copy link to this chart</button>
@@ -199,6 +226,10 @@ onMounted(() => {
   min-width: 0;
   position: relative;
   scroll-margin-top: 90px;
+}
+.plot {
+  width: 100%;
+  height: 100%;
 }
 .share {
   position: absolute;

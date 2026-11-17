@@ -16,15 +16,6 @@ interface Rating {
 }
 
 const kind = useQueryState('kind', 'drivers')
-usePageMeta({
-  title: () => (kind.value === 'cars' ? 'Car rating across eras' : 'Driver rating across eras'),
-  description: () =>
-    kind.value === 'cars'
-      ? 'How fast every Formula 1 car was against its rivals since 1950, from qualifying pace with the drivers taken out.'
-      : 'An open rating of every Formula 1 driver since 1950, built only from comparisons with their teammates, with the uncertainty shown.',
-  stats: () => (kind.value === 'cars' ? [] : (data.value?.rows ?? []).slice(0, 4).map((r) => [`${r.rank}.`, r.name])),
-})
-
 const model = useQueryState('model', 'combined')
 const minCmp = useQueryState('min', '40')
 const era = useQueryState('era', 'all')
@@ -50,6 +41,17 @@ const scale = computed(() => {
   return { lo, hi, span: hi - lo || 1 }
 })
 const at = (v: number) => `${((v - scale.value.lo) / scale.value.span) * 100}%`
+
+// After the data: the preview stats read `data`, and the head is resolved as soon as this is called in the
+// browser, which is before a `const` further down exists.
+usePageMeta({
+  title: () => (kind.value === 'cars' ? 'Car rating across eras' : 'Driver rating across eras'),
+  description: () =>
+    kind.value === 'cars'
+      ? 'How fast every Formula 1 car was against its rivals since 1950, from qualifying pace with the drivers taken out.'
+      : 'An open rating of every Formula 1 driver since 1950, built only from comparisons with their teammates, with the uncertainty shown.',
+  stats: () => (kind.value === 'cars' ? [] : (data.value?.rows ?? []).slice(0, 4).map((r) => [`${r.rank}.`, r.name])),
+})
 </script>
 
 <template>
@@ -88,6 +90,7 @@ const at = (v: number) => `${((v - scale.value.lo) / scale.value.span) * 100}%`
             <span class="value num">{{ r.skill > 0 ? '+' : '' }}{{ r.skill.toFixed(2) }}</span>
           </li>
         </ol>
+        <EmptyState v-if="data && !data.rows.length" title="No driver has that many comparisons" text="Lower the minimum number of comparisons or pick another era." />
       </Panel>
       <Panel class="span-4 method" title="How it works">
         <div class="prose small">
@@ -114,7 +117,7 @@ const at = (v: number) => `${((v - scale.value.lo) / scale.value.span) * 100}%`
 }
 .board li {
   display: grid;
-  grid-template-columns: 36px minmax(0, 1.3fr) minmax(0, 2fr) 56px;
+  grid-template-columns: 36px minmax(0, 1.7fr) minmax(0, 1.3fr) 56px;
   gap: 12px;
   align-items: center;
   padding: 9px var(--pad);

@@ -9,16 +9,6 @@ const { data, error } = await useApi<RaceDetail>(() => `/races/${year.value}/${r
 notFoundIf(error, 'Race')
 
 const race = computed(() => data.value?.race)
-const rawView = useQueryState('view', 'results')
-// Older links used "times" and "stints"; they now open Pace and Strategy.
-const view = computed({
-  get: () => ({ times: 'pace', stints: 'strategy' })[rawView.value] ?? rawView.value,
-  set: (v: string) => (rawView.value = v),
-})
-const focusParam = useQueryState('focus', '')
-const reference = useQueryState('ref', 'leader')
-const pickedParam = useQueryState('drivers', '')
-
 const LAP_VIEWS = ['story', 'laps', 'gaps']
 const tabs = computed(() => {
   const t = [{ id: 'results', label: 'Results' }]
@@ -34,6 +24,20 @@ const tabs = computed(() => {
   if (data.value?.sprint.length) t.push({ id: 'sprint', label: 'Sprint' })
   return t
 })
+
+const rawView = useQueryState('view', 'results')
+// Older links used "times" and "stints"; they now open Pace and Strategy. A view this race does not have (a lap
+// chart before 1996, a sprint that was never held, a mistyped link) opens the results instead of an empty page.
+const view = computed({
+  get: () => {
+    const v = ({ times: 'pace', stints: 'strategy' } as Record<string, string>)[rawView.value] ?? rawView.value
+    return tabs.value.some((t) => t.id === v) ? v : 'results'
+  },
+  set: (v: string) => (rawView.value = v),
+})
+const focusParam = useQueryState('focus', '')
+const reference = useQueryState('ref', 'leader')
+const pickedParam = useQueryState('drivers', '')
 
 const { data: laps, execute: loadLaps, status: lapStatus } = useFetch<RaceLaps>(() => `/api/races/${year.value}/${round.value}/laps`, {
   immediate: false,
@@ -241,7 +245,8 @@ usePageMeta({
 
       <!-- Lap-based views -->
       <template v-else-if="LAP_VIEWS.includes(view)">
-        <div v-if="!laps" class="panel"><div class="skeleton" style="height: 480px" /></div>
+        <div v-if="lapStatus === 'error' && !laps" class="panel"><EmptyState title="Lap data could not be loaded" text="Reload the page to try again." /></div>
+        <div v-else-if="!laps" class="panel"><div class="skeleton" style="height: 480px" /></div>
         <template v-else>
           <RaceStory v-if="view === 'story'" :year="year" :round="round" :laps="laps" />
           <Panel v-if="view === 'laps'" title="Lap chart" note="Position at the end of every lap; lap 0 is the starting grid. Dots mark pit stops. Pick drivers below to highlight them.">
@@ -274,7 +279,6 @@ usePageMeta({
             </div>
           </div>
         </template>
-        <p v-if="lapStatus === 'error'" class="empty">Lap data could not be loaded.</p>
       </template>
 
       <!-- Pace and strategy -->
@@ -389,7 +393,7 @@ usePageMeta({
 }
 .layout-card {
   flex: none;
-  width: 132px;
+  width: 116px;
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--radius);
@@ -401,9 +405,10 @@ usePageMeta({
   border-color: var(--accent);
 }
 .layout {
+  /* No taller than the stat tiles beside it: a taller outline stretched every tile and left them half empty. */
   width: 100%;
   height: 100%;
-  max-height: 110px;
+  max-height: 70px;
 }
 .layout path,
 .big path {

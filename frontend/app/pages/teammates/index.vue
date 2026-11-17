@@ -21,6 +21,7 @@ interface Pairing {
 const era = useQueryState('era', 'all')
 const minRaces = useQueryNumber('min', 15)
 const order = useQueryState('order', 'lopsided')
+const q = useQueryState('q', '')
 const ERAS = [
   { id: 'all', label: 'All years', from: 1950, to: 2100 },
   { id: 'current', label: 'Last 5 years', from: new Date().getFullYear() - 4, to: 2100 },
@@ -42,7 +43,9 @@ usePageMeta({ title: 'Teammate head-to-heads', description: 'Every Formula 1 tea
 
 // Each pairing is shown from the side of the driver who won the qualifying duel.
 const rows = computed(() => {
-  const list = (pairs.value ?? []).map((p) => {
+  const term = fold(q.value.trim())
+  const matching = term ? (pairs.value ?? []).filter((p) => fold(`${p.name_a} ${p.name_b}`).includes(term)) : (pairs.value ?? [])
+  const list = matching.map((p) => {
     const flip = p.quali_lost > p.quali_won
     const o = flip
       ? {
@@ -61,13 +64,14 @@ const rows = computed(() => {
   const sorters: Record<string, (x: (typeof list)[number], y: (typeof list)[number]) => number> = {
     lopsided: (x, y) => y.qShare - x.qShare || y.races - x.races,
     closest: (x, y) => Math.abs(x.qShare - 0.5) - Math.abs(y.qShare - 0.5) || y.races - x.races,
-    gap: (x, y) => (x.gap ?? 0) - (y.gap ?? 0),
+    // Pairings without a measured gap go last instead of being ranked as a gap of zero.
+    gap: (x, y) => (x.gap == null ? 1 : 0) - (y.gap == null ? 1 : 0) || (x.gap ?? 0) - (y.gap ?? 0),
     races: (x, y) => y.races - x.races,
   }
   return list.sort(sorters[order.value] ?? sorters.lopsided)
 })
 const limit = ref(100)
-watch([era, minRaces, order], () => (limit.value = 100))
+watch([era, minRaces, order, q], () => (limit.value = 100))
 </script>
 
 <template>
@@ -77,6 +81,7 @@ watch([era, minRaces, order], () => (limit.value = 100))
       sub="The only fair fight in Formula 1 is against the driver in the same car. Every pairing is shown from the side of the driver who won the qualifying duel."
     />
     <div class="filters">
+      <input v-model="q" class="input search" type="search" placeholder="Filter by driver" aria-label="Filter pairings by driver name">
       <UiSelect v-model="era" label="Years" :options="ERA_OPTIONS" />
       <UiSelect v-model="minModel" label="Together" :options="MIN_OPTIONS" />
       <UiChoice v-model="order" label="Order" :options="ORDER_OPTIONS" collapse="md" />
@@ -108,14 +113,17 @@ watch([era, minRaces, order], () => (limit.value = 100))
             </tr>
           </tbody>
         </table>
-        <EmptyState v-if="!rows.length" title="No pairings with that many races" text="Lower the minimum number of races or pick another era." />
+        <EmptyState v-if="!rows.length" :title="q.trim() ? 'No pairing matches that name' : 'No pairings with that many races'" :text="q.trim() ? 'Check the spelling, lower the minimum number of races or pick another era.' : 'Lower the minimum number of races or pick another era.'" />
       </div>
     </section>
-    <div v-if="rows.length > limit" class="more"><button class="btn" @click="limit += 200">Show more</button></div>
+    <div v-if="rows.length > limit" class="more"><button class="btn" type="button" @click="limit += 200">Show more ({{ rows.length - limit }} left)</button></div>
   </div>
 </template>
 
 <style scoped>
+.search {
+  width: 220px;
+}
 .count {
   margin-left: auto;
 }
@@ -123,6 +131,9 @@ watch([era, minRaces, order], () => (limit.value = 100))
   font-weight: 500;
 }
 @media (max-width: 640px) {
+  .search {
+    width: 100%;
+  }
   .count {
     display: none;
   }

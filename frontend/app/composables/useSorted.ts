@@ -24,5 +24,18 @@ export function useSorted<T extends object>(rows: Ref<T[] | null | undefined>, f
   function aria(k: string) {
     return key.value === k ? (desc.value ? 'descending' : 'ascending') : undefined
   }
-  return { sorted, by, aria, key, desc }
+  /** Everything a sortable <th> needs (v-bind it): the sort state, a click handler and Enter/Space for keyboards. */
+  function th(k: string, numeric = true) {
+    return {
+      'aria-sort': aria(k),
+      tabindex: 0,
+      onClick: () => by(k, numeric),
+      onKeydown: (e: KeyboardEvent) => {
+        if (e.key !== 'Enter' && e.key !== ' ') return
+        e.preventDefault()
+        by(k, numeric)
+      },
+    } as const
+  }
+  return { sorted, by, aria, th, key, desc }
 }

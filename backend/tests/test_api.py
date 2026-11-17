@@ -39,6 +39,12 @@ def test_search_ignores_accents_and_case(client):
     assert get(client, "/api/search?q=1988")[0]["type"] == "season"
 
 
+def test_search_treats_wildcards_as_text(client):
+    assert get(client, "/api/search?q=%25") == []
+    assert get(client, "/api/search?q=_") == []
+    assert any(r["id"] == "ayrton-senna" for r in get(client, "/api/search?q=senna"))
+
+
 def test_season_1988(client):
     s = get(client, "/api/seasons/1988")
     assert len(s["races"]) == 16

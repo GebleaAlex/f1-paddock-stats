@@ -25,7 +25,7 @@ interface Strategy {
 }
 
 const props = defineProps<{ year: number; round: number; circuitId: string }>()
-const { data } = useFetch<Strategy>(() => `/api/races/${props.year}/${props.round}/strategy`, {
+const { data, status } = useFetch<Strategy>(() => `/api/races/${props.year}/${props.round}/strategy`, {
   server: false,
   key: `strategy:${props.year}:${props.round}`,
 })
@@ -85,6 +85,7 @@ const common = computed(() => {
 
     <RaceSimulator v-if="data.has_timing" :year="year" :round="round" :drivers="data.drivers" />
   </div>
+  <div v-else-if="status === 'error'" class="panel"><EmptyState title="The strategy data could not be loaded" text="Reload the page to try again." /></div>
   <div v-else class="panel"><div class="skeleton" style="height: 480px" /></div>
 </template>
 

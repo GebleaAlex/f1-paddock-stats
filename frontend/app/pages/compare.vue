@@ -15,12 +15,25 @@ interface Hit { type: string; id: string; name: string; sub: string | null }
 
 const ids = useQueryState('drivers', '')
 const list = computed(() => ids.value.split(',').filter(Boolean).slice(0, 4))
-const metric = useQueryState('metric', 'wins') as Ref<'wins' | 'podiums' | 'poles' | 'points'>
-const axis = useQueryState('by', 'start') as Ref<'start' | 'age'>
+// Unknown values in a link (?metric=laps) fall back to the defaults instead of drawing an empty chart.
+type Metric = 'wins' | 'podiums' | 'poles' | 'points'
+const metricParam = useQueryState('metric', 'wins')
+const metric = computed<Metric>({
+  get: () => (['wins', 'podiums', 'poles', 'points'].includes(metricParam.value) ? (metricParam.value as Metric) : 'wins'),
+  set: (v) => (metricParam.value = v),
+})
+const axisParam = useQueryState('by', 'start')
+const axis = computed<'start' | 'age'>({
+  get: () => (axisParam.value === 'age' ? 'age' : 'start'),
+  set: (v) => (axisParam.value = v),
+})
 
 // With no selection the request 404s; that is fine, the page shows the picker instead.
-const { data } = await useApi<CompareResponse>(() => `/compare?drivers=${list.value.join(',') || '_none_'}`)
+const { data, error } = await useApi<CompareResponse>(() => `/compare?drivers=${list.value.join(',') || '_none_'}`)
 const drivers = computed(() => (list.value.length ? (data.value?.drivers ?? []) : []))
+// A link with a driver id that does not exist fails as a whole; say so and offer a way out, because the bad id
+// has no chip to remove it with.
+const broken = computed(() => list.value.length > 0 && !!error.value && !drivers.value.length)
 
 usePageMeta({
   title: () => (drivers.value.length ? drivers.value.map((d) => d.driver.name).join(' vs ') : 'Compare drivers'),
@@ -32,12 +45,30 @@ usePageMeta({
 const q = ref('')
 const hits = ref<Hit[]>([])
 let timer: ReturnType<typeof setTimeout> | undefined
+// Each search gets a number so a slow answer for "ha" cannot replace the answer for "hamilton".
+let searchId = 0
 watch(q, (v) => {
   clearTimeout(timer)
+  const mine = ++searchId
   if (!v.trim()) return (hits.value = [])
   timer = setTimeout(async () => {
-    hits.value = (await $fetch<Hit[]>('/api/search', { query: { q: v, limit: 8 } })).filter((h) => h.type === 'driver')
+    try {
+      const found = await $fetch<Hit[]>('/api/search', { query: { q: v.trim(), limit: 8 } })
+      if (mine === searchId) hits.value = found.filter((h) => h.type === 'driver' && !list.value.includes(h.id))
+    } catch {
+      if (mine === searchId) hits.value = []
+    }
   }, 120)
+})
+// Close the suggestions when the visitor clicks or taps anywhere else.
+const adder = ref<HTMLElement | null>(null)
+function outside(e: PointerEvent) {
+  if (hits.value.length && adder.value && !adder.value.contains(e.target as Node)) hits.value = []
+}
+onMounted(() => document.addEventListener('pointerdown', outside))
+onBeforeUnmount(() => {
+  document.removeEventListener('pointerdown', outside)
+  clearTimeout(timer)
 })
 function add(id: string) {
   if (!list.value.includes(id) && list.value.length < 4) ids.value = [...list.value, id].join(',')
@@ -150,7 +181,7 @@ function pickerKey(e: KeyboardEvent) {
             <NuxtLink :to="`/drivers/${d.driver.id}`">{{ d.driver.name }}</NuxtLink>
             <button class="x" type="button" :aria-label="`Remove ${d.driver.name}`" @click="remove(d.driver.id)"><Icon name="close" :size="14" /></button>
           </span>
-          <div v-if="list.length < 4" class="add">
+          <div v-if="list.length < 4 && !broken" ref="adder" class="add">
             <div class="add-field">
               <Icon name="plus" :size="16" />
               <input v-model="q" type="search" :placeholder="list.length ? 'Add another driver' : 'Add a driver to start'" aria-label="Add a driver" role="combobox" :aria-expanded="hits.length > 0" @keydown="pickerKey">
@@ -164,8 +195,14 @@ function pickerKey(e: KeyboardEvent) {
         </div>
       </section>
 
+      <div v-if="broken" class="panel">
+        <EmptyState title="A driver in this link was not found" text="The link may be mistyped or from an older version of the site.">
+          <button class="btn primary" type="button" @click="ids = ''">Start a new comparison</button>
+        </EmptyState>
+      </div>
+
       <section v-if="!drivers.length">
-        <h2 class="section-title">Or start from one of these</h2>
+        <h2 class="section-title">{{ broken ? 'Start from one of these' : 'Or start from one of these' }}</h2>
         <div class="suggestions">
           <NuxtLink v-for="sg in SUGGESTIONS" :key="sg.ids" :to="`/compare?drivers=${sg.ids}`" class="card-link suggestion">
             <b>{{ sg.title }}</b>
@@ -177,7 +214,7 @@ function pickerKey(e: KeyboardEvent) {
 
       <template v-if="drivers.length">
         <div v-if="data?.teammate_pairs.length" class="row wrap">
-          <NuxtLink v-for="p in data.teammate_pairs" :key="p.driver_a + p.driver_b" :to="`/teammates/${p.driver_a}/${p.driver_b}`" class="chip">
+          <NuxtLink v-for="p in data.teammate_pairs" :key="p.driver_a + p.driver_b" :to="`/teammates/${p.driver_a}/${p.driver_b}`" class="chip pair-chip">
             Teammates for {{ p.races }} races: {{ nameOf(p.driver_a) }} {{ p.quali_won }}–{{ p.quali_lost }} in qualifying. See the head-to-head
             <Icon name="right" :size="14" />
           </NuxtLink>
@@ -206,12 +243,12 @@ function pickerKey(e: KeyboardEvent) {
 
         <Panel title="Career progression" :note="`Career ${metric} after each race ${axis === 'age' ? 'by age' : 'start'}.`">
           <template #actions>
-            <div class="segmented">
-              <button v-for="m in METRICS" :key="m.id" :class="{ on: metric === m.id }" @click="metric = m.id">{{ m.label }}</button>
+            <div class="segmented" role="group" aria-label="Statistic">
+              <button v-for="m in METRICS" :key="m.id" type="button" :class="{ on: metric === m.id }" :aria-pressed="metric === m.id" @click="metric = m.id">{{ m.label }}</button>
             </div>
-            <div class="segmented">
-              <button :class="{ on: axis === 'start' }" @click="axis = 'start'">By start</button>
-              <button :class="{ on: axis === 'age' }" @click="axis = 'age'">By age</button>
+            <div class="segmented" role="group" aria-label="Align careers by">
+              <button type="button" :class="{ on: axis === 'start' }" :aria-pressed="axis === 'start'" @click="axis = 'start'">By start</button>
+              <button type="button" :class="{ on: axis === 'age' }" :aria-pressed="axis === 'age'" @click="axis = 'age'">By age</button>
             </div>
           </template>
           <Chart :option="careerChart" :height="400" :compact-height="320" label="Cumulative career totals" share-id="career" />
@@ -228,6 +265,16 @@ function pickerKey(e: KeyboardEvent) {
 <style scoped>
 .picker {
   gap: 10px;
+}
+/* A whole sentence in a chip: let it wrap instead of pushing the page sideways on phones. */
+.pair-chip {
+  height: auto;
+  min-height: 26px;
+  padding: 4px 10px;
+  white-space: normal;
+}
+.pair-chip svg {
+  flex: none;
 }
 .sel {
   height: 34px;

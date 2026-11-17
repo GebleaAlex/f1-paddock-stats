@@ -17,10 +17,16 @@ const { data: circuits } = await useApi<CircuitRow[]>('/circuits')
 usePageMeta({ title: 'Circuits', description: 'Every circuit that has hosted a Formula 1 world championship race, with layouts and winners.' })
 
 const only = useQueryState('only', 'all')
-const latest = computed(() => Math.max(...(circuits.value ?? []).map((c) => c.last_year ?? 0)))
-const shown = computed(() =>
-  (circuits.value ?? []).filter((c) => (only.value === 'current' ? c.last_year === latest.value : true)),
-)
+const q = useQueryState('q', '')
+// Math.max() of nothing is -Infinity, which would end up in the "On the ... calendar" label.
+const latest = computed(() => Math.max(0, ...(circuits.value ?? []).map((c) => c.last_year ?? 0)))
+// The name filter also matches the town and the country, and applies to both views.
+const matches = (c: { name: string; place_name: string; last_year: number | null; country?: string }) => {
+  if (only.value === 'current' && c.last_year !== latest.value) return false
+  const term = fold(q.value.trim())
+  return !term || fold(`${c.name} ${c.place_name} ${c.country ?? ''}`).includes(term)
+}
+const shown = computed(() => (circuits.value ?? []).filter(matches))
 const TYPES: Record<string, string> = { RACE: 'Race circuit', STREET: 'Street circuit', ROAD: 'Road course' }
 
 interface ConditionsRow {
@@ -47,16 +53,21 @@ const { data: conditions, execute: loadConditions } = useFetch<{ circuits: Condi
 )
 watch(view, (v) => import.meta.client && v === 'conditions' && !conditions.value && loadConditions(), { immediate: true })
 onMounted(() => view.value === 'conditions' && !conditions.value && loadConditions())
-const rows = computed(() => (conditions.value?.circuits ?? []).filter((c) => (only.value === 'current' ? c.last_year === latest.value : true)))
-const { sorted, by, aria } = useSorted(rows, '-safety_car_chance')
+const countryOf = computed(() => new Map((circuits.value ?? []).map((c) => [c.id, c.country])))
+const rows = computed(() => (conditions.value?.circuits ?? []).filter((c) => matches({ ...c, country: countryOf.value.get(c.circuit_id) })))
+const { sorted, th } = useSorted(rows, '-safety_car_chance')
 </script>
 
 <template>
   <div>
     <PageHeader title="Circuits" :sub="`${circuits?.length ?? ''} circuits have hosted a world championship race. Layouts from f1db.`">
-      <UiChoice v-model="only" label="Show" :options="[{ value: 'all', label: 'All circuits' }, { value: 'current', label: `On the ${latest} calendar` }]" />
+      <UiChoice v-model="only" label="Show" :options="[{ value: 'all', label: 'All circuits' }, { value: 'current', label: latest ? `On the ${latest} calendar` : 'On the calendar' }]" />
     </PageHeader>
     <Tabs v-model="view" :tabs="[{ id: 'layouts', label: 'Layouts' }, { id: 'conditions', label: 'Safety cars and rain' }]" label="Circuit views" class="views" />
+    <div class="filters">
+      <input v-model="q" class="input search" type="search" placeholder="Filter by name, town or country" aria-label="Filter circuits by name, town or country">
+      <span v-if="view !== 'conditions'" class="small muted count">{{ shown.length }} circuit{{ shown.length === 1 ? '' : 's' }}</span>
+    </div>
     <Panel
       v-if="view === 'conditions'"
       title="Where the safety car comes out"
@@ -64,19 +75,20 @@ const { sorted, by, aria } = useSorted(rows, '-safety_car_chance')
       flush
     >
       <div v-if="!conditions" class="skeleton" style="height: 360px; margin: 0 var(--pad) var(--pad)" />
-      <EmptyState v-else-if="!sorted.length" title="Not enough timing data yet" text="Circuits appear here once three of their races have timing data, loaded with paddock timing." />
+      <EmptyState v-else-if="!conditions.circuits.length" title="Not enough timing data yet" text="Circuits appear here once three of their races have timing data, loaded with paddock timing." />
+      <EmptyState v-else-if="!sorted.length" title="No circuit matches" text="Clear the filter or show all circuits. Only circuits with three races since 2018 are listed here." />
       <div v-else class="table-scroll">
         <table class="data">
           <thead>
             <tr>
               <th>Circuit</th>
-              <th class="r sortable" :aria-sort="aria('races')" @click="by('races')">Races</th>
-              <th class="r sortable" :aria-sort="aria('safety_car_chance')" @click="by('safety_car_chance')">Safety car</th>
-              <th class="r sortable hide-sm" :aria-sort="aria('safety_cars_per_race')" @click="by('safety_cars_per_race')">Per race</th>
-              <th class="r sortable hide-md" :aria-sort="aria('virtual_safety_cars')" @click="by('virtual_safety_cars')">Virtual</th>
-              <th class="r sortable hide-md" :aria-sort="aria('red_flag_races')" @click="by('red_flag_races')">Red flags</th>
-              <th class="r sortable" :aria-sort="aria('wet_races')" @click="by('wet_races')">Wet</th>
-              <th class="r sortable hide-sm" :aria-sort="aria('neutralised_pct')" @click="by('neutralised_pct')">Laps neutralised</th>
+              <th class="r sortable" v-bind="th('races')">Races</th>
+              <th class="r sortable" v-bind="th('safety_car_chance')">Safety car</th>
+              <th class="r sortable hide-sm" v-bind="th('safety_cars_per_race')">Per race</th>
+              <th class="r sortable hide-md" v-bind="th('virtual_safety_cars')">Virtual</th>
+              <th class="r sortable hide-md" v-bind="th('red_flag_races')">Red flags</th>
+              <th class="r sortable" v-bind="th('wet_races')">Wet</th>
+              <th class="r sortable hide-sm" v-bind="th('neutralised_pct')">Laps neutralised</th>
             </tr>
           </thead>
           <tbody>
@@ -94,6 +106,7 @@ const { sorted, by, aria } = useSorted(rows, '-safety_car_chance')
         </table>
       </div>
     </Panel>
+    <div v-else-if="!shown.length" class="panel"><EmptyState title="No circuit matches" text="Clear the filter or show all circuits." /></div>
     <div v-else class="cards">
       <NuxtLink v-for="c in shown" :key="c.id" :to="`/circuits/${c.id}`" class="card card-link">
         <svg v-if="c.layout_path" viewBox="0 0 500 500" class="layout" aria-hidden="true"><path :d="c.layout_path" /></svg>
@@ -110,6 +123,20 @@ const { sorted, by, aria } = useSorted(rows, '-safety_car_chance')
 <style scoped>
 .views {
   margin-bottom: 16px;
+}
+.search {
+  width: 280px;
+}
+.count {
+  margin-left: auto;
+}
+@media (max-width: 640px) {
+  .search {
+    width: 100%;
+  }
+  .count {
+    display: none;
+  }
 }
 .cards {
   display: grid;

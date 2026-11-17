@@ -82,6 +82,8 @@ watch(
   },
   { deep: true },
 )
+// Leaving the tab or the page within the delay must not write the plan into the next page's link.
+onBeforeUnmount(() => clearTimeout(timer))
 const { data: fetched, error, status } = useFetch<Simulation>(() => `/api/races/${props.year}/${props.round}/simulate`, {
   query,
   server: false,

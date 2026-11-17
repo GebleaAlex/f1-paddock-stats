@@ -54,7 +54,7 @@ const aModel = computed({ get: () => a.value, set: (v: string) => (aParam.value 
 const bModel = computed({ get: () => b.value, set: (v: string) => (bParam.value = v) })
 
 const url = computed(() => (session.value && a.value ? `/api/races/${props.year}/${props.round}/telemetry?session=${session.value.type}&drivers=${[a.value, b.value].filter(Boolean).join(',')}` : ''))
-const { data: cmp, pending } = useFetch<Compare>(() => url.value || '/api/health', {
+const { data: cmp, pending, error: cmpError } = useFetch<Compare>(() => url.value || '/api/health', {
   server: false,
   watch: [url],
   key: () => `tel:${url.value}`,
@@ -65,6 +65,8 @@ const { data: straights } = useFetch<{ rows: Straight[] }>(
 )
 
 const ready = computed(() => !!cmp.value && 'laps' in (cmp.value as object))
+// The laps could not be loaded, or the session has no lap with telemetry: say so instead of loading forever.
+const failed = computed(() => !ready.value && !pending.value && (!!cmpError.value || (!!session.value && !a.value)))
 const laps = computed(() => (ready.value ? cmp.value!.drivers.map((d) => cmp.value!.laps[d]!) : []))
 const colors = computed(() => [seriesColor(1), seriesColor(2)])
 const templateColors = [seriesVar(1), seriesVar(2)]
@@ -147,12 +149,15 @@ const is2026 = computed(() => props.year >= 2026)
         </div>
         <div v-if="laps.length === 2" class="gap panel">
           <span class="small muted">Gap</span>
-          <b class="big">{{ ((laps[1]!.lap_time_ms - laps[0]!.lap_time_ms) / 1000).toFixed(3) }}s</b>
-          <span class="small ink-2">{{ laps[1]!.lap_time_ms >= laps[0]!.lap_time_ms ? laps[0]!.abbreviation : laps[1]!.abbreviation }} faster</span>
+          <b class="big num">{{ (Math.abs(laps[1]!.lap_time_ms - laps[0]!.lap_time_ms) / 1000).toFixed(3) }}s</b>
+          <span class="small ink-2">{{ laps[1]!.lap_time_ms === laps[0]!.lap_time_ms ? 'Identical lap times' : `${(laps[1]!.lap_time_ms > laps[0]!.lap_time_ms ? laps[0]! : laps[1]!).abbreviation ?? (laps[1]!.lap_time_ms > laps[0]!.lap_time_ms ? laps[0]! : laps[1]!).name} faster` }}</span>
         </div>
       </div>
 
-      <div class="grid-12">
+      <div v-if="failed" class="panel">
+        <EmptyState title="These laps could not be loaded" text="Pick another session or driver, or reload the page to try again." />
+      </div>
+      <div v-else class="grid-12">
         <Panel class="span-5" title="Track map" note="Each section is coloured by the faster driver. Press play to replay both laps.">
           <RaceTrackMap v-if="ready" :laps="laps" :rotation="cmp!.session.rotation" :corners="cmp!.session.corners" :dominance="cmp!.dominance" :colors="templateColors" />
           <div v-else class="skeleton" style="aspect-ratio: 1.15" />
@@ -194,7 +199,7 @@ const is2026 = computed(() => props.year >= 2026)
                 :class="{ focus: focusCorner === c.corner, unreliable: !c.reliable }"
                 tabindex="0"
                 @click="focusCorner = focusCorner === c.corner ? null : c.corner"
-                @keydown.enter="focusCorner = focusCorner === c.corner ? null : c.corner"
+                @keydown.enter.space.prevent="focusCorner = focusCorner === c.corner ? null : c.corner"
               >
                 <td class="nowrap"><b>Turn {{ c.corner }}</b><span class="sub-line">{{ (c.apex_m / 1000).toFixed(2) }} km</span></td>
                 <td class="bar-col">

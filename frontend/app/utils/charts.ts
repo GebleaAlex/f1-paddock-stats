@@ -195,7 +195,7 @@ export function progressionOption(
   const show = labelled(Object.fromEntries(entries.map((e) => [e.id, e.points.at(-1)])), top * 0.04)
   return {
     animation: false,
-    legend: { type: 'scroll', top: 0, left: 0, right: 0 },
+    legend: { type: 'scroll', top: 0, left: 0, right: 0, padding: [5, 36, 5, 5] },
     grid: { ...GRID, top: 40, right: 64 },
     tooltip: {
       trigger: 'axis',
@@ -608,7 +608,7 @@ export function telemetryOption(
   })
   return {
     animation: false,
-    legend: { top: 0, right: 0, data: laps.map((l) => l.abbreviation ?? l.name) },
+    legend: { top: 0, left: 0, data: laps.map((l) => l.abbreviation ?? l.name) },
     axisPointer: { link: [{ xAxisIndex: 'all' }] },
     tooltip: {
       trigger: 'axis',
@@ -649,7 +649,7 @@ export function competitiveOrderOption(
   const seen = new Map<string, number>()
   return {
     animation: false,
-    legend: { type: 'scroll', top: 0, left: 0, right: 0 },
+    legend: { type: 'scroll', top: 0, left: 0, right: 0, padding: [5, 36, 5, 5] },
     grid: { left: 8, right: 64, top: 40, bottom: 28, containLabel: true },
     tooltip: {
       trigger: 'axis',

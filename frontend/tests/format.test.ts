@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { age, gapSeconds, lapTime, listing, ordinal, pct, points, years } from '../app/utils/format'
+import { age, fold, gapSeconds, lapTime, listing, ordinal, pct, points, years } from '../app/utils/format'
 
 describe('format', () => {
   it('formats lap times', () => {
@@ -31,5 +31,11 @@ describe('format', () => {
     expect(listing(['McLaren', 'Mercedes', 'Ferrari'])).toBe('McLaren, Mercedes and Ferrari')
     expect(years(2007, 2007)).toBe('2007')
     expect(years(2007, 2026)).toBe('2007–2026')
+  })
+  it('folds case and accents for the name filters', () => {
+    expect(fold('Sergio Pérez')).toBe('sergio perez')
+    expect(fold('Nico Hülkenberg')).toContain('hulk')
+    expect(fold('Kimi Räikkönen').includes(fold('RAIKK'))).toBe(true)
+    expect(fold(null)).toBe('')
   })
 })

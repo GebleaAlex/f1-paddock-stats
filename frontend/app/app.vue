@@ -27,8 +27,24 @@ watch(() => route.fullPath, () => (menu.value = false))
 function onKey(e: KeyboardEvent) {
   if (e.key === 'Escape') menu.value = false
 }
-onMounted(() => window.addEventListener('keydown', onKey))
-onBeforeUnmount(() => window.removeEventListener('keydown', onKey))
+// Back to top: appears once the visitor is a couple of screens down a long page (driver lists, race tables).
+const scrolled = ref(false)
+function onScroll() {
+  scrolled.value = window.scrollY > 1200
+}
+function toTop() {
+  const calm = window.matchMedia('(prefers-reduced-motion: reduce)').matches
+  window.scrollTo({ top: 0, behavior: calm ? 'auto' : 'smooth' })
+}
+onMounted(() => {
+  window.addEventListener('keydown', onKey)
+  window.addEventListener('scroll', onScroll, { passive: true })
+  onScroll()
+})
+onBeforeUnmount(() => {
+  window.removeEventListener('keydown', onKey)
+  window.removeEventListener('scroll', onScroll)
+})
 watch(menu, (open) => {
   if (import.meta.client) document.documentElement.style.overflow = open ? 'hidden' : ''
 })
@@ -68,33 +84,36 @@ useSeoMeta({
           <span>Paddock Stats</span>
         </NuxtLink>
         <nav class="nav" aria-label="Main">
-          <NuxtLink v-for="n in NAV" :key="n.to" :to="n.to" :class="{ on: section === n.to }">{{ n.label }}</NuxtLink>
+          <NuxtLink v-for="n in NAV" :key="n.to" :to="n.to" :class="{ on: section === n.to }" :aria-current="section === n.to ? 'page' : undefined">{{ n.label }}</NuxtLink>
         </nav>
         <div class="row tools">
           <SearchBox />
           <button class="btn ghost icon" type="button" aria-label="Switch between light and dark theme" @click="toggle">
             <ClientOnly><Icon :name="mode === 'dark' ? 'sun' : 'moon'" /><template #fallback><Icon name="moon" /></template></ClientOnly>
           </button>
-          <button class="btn ghost icon menu-btn" type="button" aria-label="Menu" :aria-expanded="menu" @click="menu = !menu">
+          <button class="btn ghost icon menu-btn" type="button" :aria-label="menu ? 'Close the menu' : 'Menu'" :aria-expanded="menu" aria-controls="mobile-nav" @click="menu = !menu">
             <Icon :name="menu ? 'close' : 'menu'" />
           </button>
         </div>
       </div>
-      <Transition name="menu">
-        <div v-if="menu" class="menu-layer" @click.self="menu = false">
-          <nav class="mobile-nav container" aria-label="Main">
-            <NuxtLink v-for="n in NAV" :key="n.to" :to="n.to" :class="{ on: section === n.to }">
-              <b>{{ n.label }}</b>
-              <span class="small muted">{{ n.hint }}</span>
-            </NuxtLink>
-            <NuxtLink to="/about" class="about" :class="{ on: section === '/about' }">
-              <b>About and data</b>
-              <span class="small muted">Sources, licences and how the numbers are made</span>
-            </NuxtLink>
-          </nav>
-        </div>
-      </Transition>
     </header>
+    <!-- Outside the header on purpose: the header's backdrop-filter makes it the containing block of fixed
+         children, which left this layer with no height (no backdrop, and a menu taller than the screen could not
+         be scrolled). -->
+    <Transition name="menu">
+      <div v-if="menu" class="menu-layer" @click.self="menu = false">
+        <nav id="mobile-nav" class="mobile-nav container" aria-label="Main">
+          <NuxtLink v-for="n in NAV" :key="n.to" :to="n.to" :class="{ on: section === n.to }" :aria-current="section === n.to ? 'page' : undefined" @click="menu = false">
+            <b>{{ n.label }}</b>
+            <span class="small muted">{{ n.hint }}</span>
+          </NuxtLink>
+          <NuxtLink to="/about" class="about" :class="{ on: section === '/about' }" @click="menu = false">
+            <b>About and data</b>
+            <span class="small muted">Sources, licences and how the numbers are made</span>
+          </NuxtLink>
+        </nav>
+      </div>
+    </Transition>
 
     <main id="main" class="container main">
       <!-- Remount on a new path (another race or driver), not on query changes (tabs, filters). -->
@@ -125,6 +144,11 @@ useSeoMeta({
         </p>
       </div>
     </footer>
+    <Transition name="to-top">
+      <button v-if="scrolled && !menu" class="btn icon to-top" type="button" aria-label="Back to top" title="Back to top" @click="toTop">
+        <Icon name="up" />
+      </button>
+    </Transition>
   </div>
 </template>
 
@@ -203,13 +227,15 @@ useSeoMeta({
   inset: 60px 0 0;
   background: rgba(8, 10, 14, 0.35);
   z-index: 49;
+  overflow-y: auto;
+  overscroll-behavior: contain;
 }
 .mobile-nav {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 6px;
   padding-top: 12px;
-  padding-bottom: 16px;
+  padding-bottom: calc(16px + env(safe-area-inset-bottom));
   background: var(--page);
   border-bottom: 1px solid var(--border);
   box-shadow: var(--shadow-lg);
@@ -250,6 +276,29 @@ useSeoMeta({
 .menu-enter-from .mobile-nav,
 .menu-leave-to .mobile-nav {
   transform: translateY(-8px);
+}
+.to-top {
+  position: fixed;
+  right: calc(16px + env(safe-area-inset-right));
+  bottom: calc(16px + env(safe-area-inset-bottom));
+  z-index: 40;
+  width: 40px;
+  height: 40px;
+  box-shadow: var(--shadow-lg);
+}
+.to-top-enter-active,
+.to-top-leave-active {
+  transition: opacity 0.15s ease, transform 0.15s ease;
+}
+.to-top-enter-from,
+.to-top-leave-to {
+  opacity: 0;
+  transform: translateY(6px);
+}
+@media print {
+  .to-top {
+    display: none;
+  }
 }
 .skip {
   position: absolute;

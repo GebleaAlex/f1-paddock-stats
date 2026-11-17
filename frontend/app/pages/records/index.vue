@@ -11,7 +11,7 @@ interface BoardData {
 
 const { data: boards } = await useApi<Board[]>('/records')
 const board = useQueryState('board', 'wins')
-const { data } = await useApi<BoardData>(() => `/records/${board.value}?limit=50`)
+const { data, pending } = await useApi<BoardData>(() => `/records/${board.value}?limit=50`)
 usePageMeta({
   title: () => (data.value ? `Records: ${data.value.label}` : 'Records'),
   description: 'Formula 1 all-time records: wins, poles, titles, streaks, youngest and oldest winners.',
@@ -37,9 +37,9 @@ function fmt(v: number, unit: string | null) {
       <UiSelect v-model="board" class="board-select" label="Record" :options="boardOptions" block />
       <nav class="boards" aria-label="Records">
         <div class="eyebrow">Drivers</div>
-        <button v-for="b in drivers" :key="b.id" :class="{ on: b.id === board }" @click="board = b.id">{{ b.label }}</button>
+        <button v-for="b in drivers" :key="b.id" type="button" :class="{ on: b.id === board }" :aria-current="b.id === board ? 'true' : undefined" @click="board = b.id">{{ b.label }}</button>
         <div class="eyebrow" style="margin-top: 12px">Teams</div>
-        <button v-for="b in teams" :key="b.id" :class="{ on: b.id === board }" @click="board = b.id">{{ b.label }}</button>
+        <button v-for="b in teams" :key="b.id" type="button" :class="{ on: b.id === board }" :aria-current="b.id === board ? 'true' : undefined" @click="board = b.id">{{ b.label }}</button>
       </nav>
       <Panel v-if="data" :title="data.label" :note="data.hint ?? undefined" flush>
         <table class="data">
@@ -57,6 +57,12 @@ function fmt(v: number, unit: string | null) {
           </tbody>
         </table>
       </Panel>
+      <!-- A link to a record that does not exist (renamed, mistyped) used to leave this column empty. -->
+      <div v-else-if="!pending" class="panel">
+        <EmptyState title="That record does not exist" text="Pick one from the list.">
+          <button class="btn" type="button" @click="board = 'wins'">Show most wins</button>
+        </EmptyState>
+      </div>
     </div>
   </div>
 </template>

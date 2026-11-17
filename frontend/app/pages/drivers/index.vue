@@ -20,12 +20,11 @@ const ONLY = [
   { value: 'champions', label: 'Champions' },
 ]
 
-const strip = (s: string) => s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '')
 const filtered = computed(() => {
-  const term = strip(q.value.trim())
+  const term = fold(q.value.trim())
   const decade = era.value === 'all' ? null : Number(era.value)
   return (drivers.value ?? []).filter((d) => {
-    if (term && !strip(d.name).includes(term)) return false
+    if (term && !fold(d.name).includes(term)) return false
     if (decade && !(d.first_year && d.last_year && d.first_year <= decade + 9 && d.last_year >= decade)) return false
     if (only.value === 'winners' && !d.wins) return false
     if (only.value === 'champions' && !d.championships) return false
@@ -33,7 +32,7 @@ const filtered = computed(() => {
     return true
   })
 })
-const { sorted, by, aria, key: sortKey } = useSorted(filtered, '-wins')
+const { sorted, th, key: sortKey } = useSorted(filtered, '-wins')
 const rows = computed(() => sorted.value.slice(0, limit.value))
 watch([q, era, only], () => (limit.value = 100))
 
@@ -72,10 +71,10 @@ const fmt = (d: DriverRow, k: ColKey) => (k === 'points' ? (d.points ? points(d.
         <table class="data">
           <thead>
             <tr>
-              <th class="sortable" :aria-sort="aria('name')" @click="by('name', false)">Driver</th>
-              <th class="sortable hide-md" :aria-sort="aria('nationality')" @click="by('nationality', false)">Nationality</th>
-              <th class="sortable hide-sm" :aria-sort="aria('first_year')" @click="by('first_year', false)">Years</th>
-              <th v-for="c in COLS" :key="c.key" class="r sortable hide-sm" :aria-sort="aria(c.key)" @click="by(c.key)">{{ c.label }}</th>
+              <th class="sortable" v-bind="th('name', false)">Driver</th>
+              <th class="sortable hide-md" v-bind="th('nationality', false)">Nationality</th>
+              <th class="sortable hide-sm" v-bind="th('first_year', false)">Years</th>
+              <th v-for="c in COLS" :key="c.key" class="r sortable hide-sm" v-bind="th(c.key)">{{ c.label }}</th>
               <th class="r only-sm-cell">{{ mobileLabel }}</th>
             </tr>
           </thead>

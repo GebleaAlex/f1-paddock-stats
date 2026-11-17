@@ -27,7 +27,7 @@ const chart = useChartOption<EChartsOption>(() => {
   const styles = driverStyles(ids.map((d) => ({ driver_id: d, constructor_id: props.teamOf(d) })))
   return {
     animation: false,
-    legend: { type: 'scroll', top: 0, left: 0, right: 0 },
+    legend: { type: 'scroll', top: 0, left: 0, right: 0, padding: [5, 36, 5, 5] },
     grid: { left: 8, right: 16, top: 40, bottom: 28, containLabel: true },
     tooltip: { trigger: 'axis', valueFormatter: (v) => `${Math.round((v as number) * 100)}%` },
     xAxis: { type: 'category', data: h.map((r) => r.abbreviation), boundaryGap: false },

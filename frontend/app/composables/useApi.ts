@@ -6,10 +6,15 @@ export function useApi<T>(path: string | (() => string), opts: { lazy?: boolean;
   return useAsyncData<T>(url, () => $fetch<T>(url()), opts)
 }
 
-/** Throws a proper 404 page when the API says the item does not exist. */
+/**
+ * Stops a detail page from rendering empty when its data did not load. A 404, or a 422 for an id the API cannot
+ * parse (/seasons/abc), becomes the "not found" page; any other failure (API down, 500) becomes the error page.
+ */
 export function notFoundIf(error: Ref<unknown>, what = 'Page') {
   const e = error.value as { statusCode?: number } | null
-  if (e && e.statusCode === 404) {
+  if (!e) return
+  if (e.statusCode === 404 || e.statusCode === 422) {
     throw createError({ statusCode: 404, statusMessage: `${what} not found`, fatal: true })
   }
+  throw createError({ statusCode: e.statusCode ?? 500, statusMessage: 'The data could not be loaded', fatal: true })
 }

@@ -26,7 +26,7 @@ interface PaceRanking {
 
 const props = defineProps<{ year: number; round: number; picked: string[] }>()
 const emit = defineEmits<{ toggle: [id: string] }>()
-const { data } = useFetch<PaceRanking>(() => `/api/races/${props.year}/${props.round}/pace-ranking`, {
+const { data, status } = useFetch<PaceRanking>(() => `/api/races/${props.year}/${props.round}/pace-ranking`, {
   server: false,
   key: `pace-ranking:${props.year}:${props.round}`,
 })
@@ -47,7 +47,8 @@ const name = (r: PaceRow) => r.abbreviation || r.name
     :note="`Median of each driver's green-flag laps with the weight of fuel taken out; the bar is the middle half of those laps. ${data?.has_timing ? 'Safety-car laps, ' : ''}in- and out-laps and lap 1 are left out. Tap a driver to add them to the chart below.`"
     flush
   >
-    <div v-if="!data" class="skeleton" style="height: 420px; margin: 0 var(--pad) var(--pad)" />
+    <EmptyState v-if="!data && status === 'error'" title="The pace ranking could not be loaded" text="Reload the page to try again." />
+    <div v-else-if="!data" class="skeleton" style="height: 420px; margin: 0 var(--pad) var(--pad)" />
     <EmptyState v-else-if="!rows.length" title="Not enough laps" :text="`Drivers need at least ${data.method.min_laps} green-flag laps to be ranked.`" />
     <template v-else>
       <ol class="board">

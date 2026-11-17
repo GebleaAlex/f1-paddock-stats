@@ -657,6 +657,10 @@ button.chip:hover {
   align-items: center;
   margin-bottom: 16px;
 }
+/* In a stack the gap already separates the row from what it filters; the margin on top doubled the space. */
+.stack > .filters {
+  margin-bottom: 0;
+}
 .filters .input {
   height: 36px;
 }
@@ -677,6 +681,11 @@ table.data th.sortable::after {
   width: 0.9em;
   margin-left: 2px;
   opacity: 0.35;
+}
+/* On right-aligned (number) columns the arrow hangs in the cell padding, so the label stays flush with the
+   numbers under it instead of sitting an arrow's width to their left. */
+table.data th.r.sortable::after {
+  position: absolute;
 }
 table.data th.sortable:hover::after {
   content: '↕';

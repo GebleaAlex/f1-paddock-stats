@@ -13,18 +13,27 @@ function measure() {
   fadeLeft.value = el.scrollLeft > 4
   fadeRight.value = el.scrollLeft + el.clientWidth < el.scrollWidth - 4
 }
+// Centre the selected tab by scrolling the strip itself. scrollIntoView would also scroll the page down to the
+// tabs when they are below the fold (a phone held sideways, a link opened on a small screen).
 function reveal() {
   nextTick(() => {
-    strip.value?.querySelector<HTMLElement>('.on')?.scrollIntoView({ block: 'nearest', inline: 'center' })
+    const el = strip.value
+    const on = el?.querySelector<HTMLElement>('.on')
+    if (el && on) {
+      const left = on.getBoundingClientRect().left - el.getBoundingClientRect().left + el.scrollLeft
+      el.scrollTo({ left: left - (el.clientWidth - on.offsetWidth) / 2 })
+    }
     measure()
   })
 }
 function onKey(e: KeyboardEvent) {
   const i = props.tabs.findIndex((t) => t.id === props.modelValue)
-  const next = e.key === 'ArrowRight' ? i + 1 : e.key === 'ArrowLeft' ? i - 1 : -1
-  if (next >= 0 && next < props.tabs.length) {
+  const last = props.tabs.length - 1
+  const next = e.key === 'ArrowRight' ? i + 1 : e.key === 'ArrowLeft' ? i - 1 : e.key === 'Home' ? 0 : e.key === 'End' ? last : -1
+  if (next >= 0 && next <= last && next !== i) {
+    e.preventDefault()
     emit('update:modelValue', props.tabs[next]!.id)
-    nextTick(() => strip.value?.querySelector<HTMLElement>('.on')?.focus())
+    strip.value?.querySelectorAll<HTMLElement>('[role=tab]')[next]?.focus()
   }
 }
 onMounted(() => {

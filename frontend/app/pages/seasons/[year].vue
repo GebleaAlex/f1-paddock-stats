@@ -15,8 +15,17 @@ const { data: progression } = await useApi<Progression>(() => `/seasons/${year.v
 const { data: grid } = await useApi<ResultsGrid>(() => `/seasons/${year.value}/results-grid`)
 const { data: systems } = await useApi<PointsSystem[]>('/points-systems')
 
-const kind = useQueryState('standings', 'drivers') as Ref<'drivers' | 'constructors'>
-const system = useQueryState('system', '2010')
+// Anything other than the two known values in a link (?standings=teams) falls back to the default.
+const kindParam = useQueryState('standings', 'drivers')
+const kind = computed<'drivers' | 'constructors'>({
+  get: () => (kindParam.value === 'constructors' ? 'constructors' : 'drivers'),
+  set: (v) => (kindParam.value = v),
+})
+const systemParam = useQueryState('system', '2010')
+const system = computed({
+  get: () => (systems.value && !systems.value.some((s) => s.id === systemParam.value) ? '2010' : systemParam.value),
+  set: (v: string) => (systemParam.value = v),
+})
 const { data: rescore } = await useApi<Rescore>(() => `/seasons/${year.value}/rescore?system=${system.value}`)
 
 const systemOptions = computed(() => (systems.value ?? []).map((s) => ({ value: s.id, label: s.label, sub: `Used ${s.years}` })))
@@ -108,9 +117,9 @@ function cellTitle(c: GridCell | null, round: string) {
       <div class="grid-12">
         <Panel class="span-5" title="Standings" flush>
           <template #actions>
-            <div class="segmented" role="tablist">
-              <button :class="{ on: kind === 'drivers' }" @click="kind = 'drivers'">Drivers</button>
-              <button :class="{ on: kind === 'constructors' }" @click="kind = 'constructors'">Teams</button>
+            <div class="segmented" role="group" aria-label="Standings">
+              <button type="button" :class="{ on: kind === 'drivers' }" :aria-pressed="kind === 'drivers'" @click="kind = 'drivers'">Drivers</button>
+              <button type="button" :class="{ on: kind === 'constructors' }" :aria-pressed="kind === 'constructors'" @click="kind = 'constructors'">Teams</button>
             </div>
           </template>
           <div class="table-scroll standings">
@@ -144,7 +153,7 @@ function cellTitle(c: GridCell | null, round: string) {
           </div>
         </Panel>
         <Panel class="span-7" title="Points over the season" :note="`Top ten ${kind === 'drivers' ? 'drivers' : 'teams'}. Hover or tap a line to isolate it.`">
-          <Chart v-if="progression?.rounds.length" :option="progressionChart" :height="420" :compact-height="340" label="Championship points after each round" share-id="points" />
+          <Chart v-if="progression?.rounds.length" :option="progressionChart" :height="508" :compact-height="340" label="Championship points after each round" share-id="points" />
           <p v-else class="empty">No races run yet.</p>
         </Panel>
       </div>

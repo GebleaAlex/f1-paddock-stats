@@ -132,10 +132,26 @@ const gapNow = computed(() => {
 </template>
 
 <style scoped>
-.track svg {
+.track {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.track > svg {
   width: 100%;
   aspect-ratio: 1.15;
   display: block;
+}
+/* Beside the telemetry chart the panel is as tall as the chart: let the map fill it, centred, with the
+   replay controls on the bottom edge, instead of leaving the lower half of the panel empty. */
+@media (min-width: 1081px) {
+  .track > svg {
+    flex: 1;
+    min-height: 280px;
+    aspect-ratio: auto;
+  }
 }
 .outline {
   fill: none;

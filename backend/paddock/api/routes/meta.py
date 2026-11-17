@@ -48,7 +48,9 @@ def meta():
 def search(q: str = Query(..., min_length=1, max_length=60), limit: int = Query(8, ge=1, le=30)):
     """Drivers, constructors, circuits and seasons whose name matches the query (accents ignored)."""
     term = q.strip()
-    like = f"%{term.lower()}%"
+    # "%" and "_" are wildcards in LIKE: typed by a visitor they must match themselves, not everything.
+    literal = term.lower().replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+    like = f"%{literal}%"
     results = []
     if term.isdigit() and len(term) == 4 and db.one("SELECT 1 FROM season WHERE year = ?", [int(term)]):
         results.append({"type": "season", "id": term, "name": f"{term} season", "sub": None})
@@ -61,8 +63,8 @@ def search(q: str = Query(..., min_length=1, max_length=60), limit: int = Query(
         LEFT JOIN (SELECT driver_id, min(year) AS first_year, max(year) AS last_year FROM season_driver
                    WHERE total_race_entries > 0 GROUP BY 1) s
                ON s.driver_id = d.id
-        WHERE lower(strip_accents(d.full_name)) LIKE strip_accents($like)
-           OR lower(strip_accents(d.name)) LIKE strip_accents($like)
+        WHERE lower(strip_accents(d.full_name)) LIKE strip_accents($like) ESCAPE '\\'
+           OR lower(strip_accents(d.name)) LIKE strip_accents($like) ESCAPE '\\'
            OR lower(d.abbreviation) = lower($term)
         ORDER BY d.total_race_entries DESC LIMIT $limit
         """,
@@ -72,8 +74,8 @@ def search(q: str = Query(..., min_length=1, max_length=60), limit: int = Query(
         """
         SELECT 'constructor' AS type, c.id, c.name, n.name AS sub FROM constructor c
         LEFT JOIN country n ON n.id = c.country_id
-        WHERE lower(strip_accents(c.name)) LIKE strip_accents($like)
-           OR lower(strip_accents(c.full_name)) LIKE strip_accents($like)
+        WHERE lower(strip_accents(c.name)) LIKE strip_accents($like) ESCAPE '\\'
+           OR lower(strip_accents(c.full_name)) LIKE strip_accents($like) ESCAPE '\\'
         ORDER BY c.total_race_entries DESC LIMIT $limit
         """,
         {"like": like, "limit": limit},
@@ -82,10 +84,10 @@ def search(q: str = Query(..., min_length=1, max_length=60), limit: int = Query(
         """
         SELECT 'circuit' AS type, ci.id, ci.name, ci.place_name || ', ' || co.name AS sub FROM circuit ci
         JOIN country co ON co.id = ci.country_id
-        WHERE lower(strip_accents(ci.name)) LIKE strip_accents($like)
-           OR lower(strip_accents(ci.full_name)) LIKE strip_accents($like)
-           OR lower(strip_accents(ci.place_name)) LIKE strip_accents($like)
-           OR lower(strip_accents(co.name)) LIKE strip_accents($like)
+        WHERE lower(strip_accents(ci.name)) LIKE strip_accents($like) ESCAPE '\\'
+           OR lower(strip_accents(ci.full_name)) LIKE strip_accents($like) ESCAPE '\\'
+           OR lower(strip_accents(ci.place_name)) LIKE strip_accents($like) ESCAPE '\\'
+           OR lower(strip_accents(co.name)) LIKE strip_accents($like) ESCAPE '\\'
         ORDER BY ci.total_races_held DESC LIMIT $limit
         """,
         {"like": like, "limit": limit},

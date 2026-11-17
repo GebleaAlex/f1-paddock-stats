@@ -101,7 +101,7 @@ usePageMeta({ title: 'About and data', description: 'Where Paddock Stats gets it
           <a class="link" href="https://github.com/theOehrly/Fast-F1" rel="noopener">FastF1</a> library. That data has
           no open licence: it is used only to draw charts and is never offered for download.
         </p>
-        <p v-if="meta" class="small muted">Database built {{ new Date(meta.built_at).toLocaleString('en-GB', { dateStyle: 'medium', timeStyle: 'short' }) }}.</p>
+        <p v-if="meta" class="small muted">Database built {{ new Date(meta.built_at).toLocaleString('en-GB', { dateStyle: 'medium', timeStyle: 'short', timeZone: 'UTC' }) }} UTC.</p>
       </Panel>
       <Panel class="span-12" title="Not official">
         <p class="prose">

@@ -19,16 +19,17 @@ usePageMeta({ title: 'Teams', description: 'Every Formula 1 constructor since 19
 
 const q = useQueryState('q', '')
 const only = useQueryState('only', 'winners')
+const latest = computed(() => Math.max(0, ...(teams.value ?? []).map((x) => x.last_year ?? 0)))
 const filtered = computed(() => {
-  const term = q.value.trim().toLowerCase()
+  const term = fold(q.value.trim())
   return (teams.value ?? []).filter((t) => {
-    if (term && !t.name.toLowerCase().includes(term)) return false
+    if (term && !fold(t.name).includes(term)) return false
     if (only.value === 'winners' && !t.wins) return false
-    if (only.value === 'current' && t.last_year !== Math.max(...(teams.value ?? []).map((x) => x.last_year ?? 0))) return false
+    if (only.value === 'current' && t.last_year !== latest.value) return false
     return true
   })
 })
-const { sorted, by, aria } = useSorted(filtered, '-wins')
+const { sorted, th } = useSorted(filtered, '-wins')
 const rows = computed(() => sorted.value)
 const ONLY = [
   { value: 'current', label: 'Current' },
@@ -50,14 +51,14 @@ const ONLY = [
         <table class="data">
           <thead>
             <tr>
-              <th class="sortable" :aria-sort="aria('name')" @click="by('name', false)">Team</th>
-              <th class="sortable hide-md" :aria-sort="aria('country')" @click="by('country', false)">Country</th>
-              <th class="sortable hide-sm" :aria-sort="aria('first_year')" @click="by('first_year', false)">Years</th>
-              <th class="r sortable hide-sm" :aria-sort="aria('starts')" @click="by('starts')">Starts</th>
-              <th class="r sortable" :aria-sort="aria('wins')" @click="by('wins')">Wins</th>
-              <th class="r sortable hide-sm" :aria-sort="aria('one_twos')" @click="by('one_twos')">1-2s</th>
-              <th class="r sortable hide-sm" :aria-sort="aria('poles')" @click="by('poles')">Poles</th>
-              <th class="r sortable" :aria-sort="aria('championships')" @click="by('championships')">Titles</th>
+              <th class="sortable" v-bind="th('name', false)">Team</th>
+              <th class="sortable hide-md" v-bind="th('country', false)">Country</th>
+              <th class="sortable hide-sm" v-bind="th('first_year', false)">Years</th>
+              <th class="r sortable hide-sm" v-bind="th('starts')">Starts</th>
+              <th class="r sortable" v-bind="th('wins')">Wins</th>
+              <th class="r sortable hide-sm" v-bind="th('one_twos')">1-2s</th>
+              <th class="r sortable hide-sm" v-bind="th('poles')">Poles</th>
+              <th class="r sortable" v-bind="th('championships')">Titles</th>
             </tr>
           </thead>
           <tbody>
@@ -76,6 +77,7 @@ const ONLY = [
             </tr>
           </tbody>
         </table>
+        <EmptyState v-if="!rows.length" title="No team matches these filters" text="Clear the name filter or show all teams." />
       </div>
     </section>
   </div>

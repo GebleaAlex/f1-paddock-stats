@@ -39,18 +39,21 @@ const events = computed(() =>
   ),
 )
 const focus = ref<string[]>([])
-function pick(e: StoryEvent, i: number) {
-  if (selected.value === e.lap && activeIndex.value === i) {
+// The picked moment is remembered by what it is, not by its place in the list, so it stays the right one when
+// the filter changes the list.
+const eventKey = (e: StoryEvent) => `${e.lap}|${e.kind}|${e.text}`
+const active = ref('')
+function pick(e: StoryEvent) {
+  if (selected.value === e.lap && active.value === eventKey(e)) {
     lapParam.value = ''
     focus.value = []
-    activeIndex.value = -1
+    active.value = ''
     return
   }
   lapParam.value = String(e.lap)
   focus.value = e.drivers
-  activeIndex.value = i
+  active.value = eventKey(e)
 }
-const activeIndex = ref(-1)
 
 const chart = useChartOption(() => withLapMarks(lapChartOption(props.laps, focus.value), story.value?.periods, selected.value))
 const LABEL: Record<StoryEvent['kind'], string> = {
@@ -85,7 +88,7 @@ const LABEL: Record<StoryEvent['kind'], string> = {
       </template>
       <ol v-if="story" class="timeline">
         <li v-for="(e, i) in events" :key="i">
-          <button type="button" :class="{ on: activeIndex === i }" @click="pick(e, i)">
+          <button type="button" :class="{ on: active === eventKey(e) }" :aria-pressed="active === eventKey(e)" @click="pick(e)">
             <span class="lap num">L{{ e.lap }}</span>
             <span class="tag" :class="e.kind">{{ LABEL[e.kind] }}</span>
             <span class="text">{{ e.text }}</span>
